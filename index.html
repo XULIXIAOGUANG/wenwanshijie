@@ -415,6 +415,75 @@
   .chevron { color: var(--text-sub); font-size: 16px; font-weight: 400; }
   .ver-text { font-size: 14px; color: var(--text-sub); }
 
+  /* ======== 更新引导横幅（全屏，iOS 自动刷新兜底） ======== */
+  .update-banner {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .update-banner.show { opacity: 1; }
+  .update-banner-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .update-banner-card {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--primary);
+    border-radius: 16px;
+    padding: 24px 20px 20px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  }
+  .update-banner-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: var(--primary-bg);
+    color: var(--primary-deep);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .update-banner-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 10px;
+  }
+  .update-banner-title b { color: var(--primary-deep); }
+  .update-banner-desc {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-sub);
+    margin-bottom: 18px;
+  }
+  .update-banner-btn {
+    width: 100%;
+    padding: 12px 0;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary-deep), #4A7A5B);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(92,143,110,0.25);
+    transition: transform 0.15s, opacity 0.2s;
+  }
+  .update-banner-btn:active { transform: scale(0.97); opacity: 0.92; }
+
   /* ======== 局域网同步（三端共用） ======== */
   .sync-status-row {
     display: flex; align-items: center; gap: 8px;
@@ -2980,9 +3049,60 @@
 </div>
 
 <script>
-  // Service Worker 注册 + 持久化存储请求 + 版本更新监听
+  // ============ 全局版本号 ============
+  // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
+  const APP_VERSION = 'v3.0.0';
+
+  // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
+  function showUpdateBanner(remoteVer) {
+    if (document.getElementById('updateBanner')) return;
+    const el = document.createElement('div');
+    el.id = 'updateBanner';
+    el.className = 'update-banner';
+    el.innerHTML =
+      '<div class="update-banner-mask"></div>' +
+      '<div class="update-banner-card">' +
+        '<div class="update-banner-badge">发现新版本</div>' +
+        '<div class="update-banner-title">检测到新版本 <b>' + remoteVer + '</b></div>' +
+        '<div class="update-banner-desc">正在为您更新。若页面未自动刷新，请点击下方按钮，或关闭本应用后重新打开。</div>' +
+        '<button class="update-banner-btn" id="updateBannerRefresh">立即刷新</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    el.querySelector('#updateBannerRefresh').addEventListener('click', () => location.reload());
+  }
+
+  // ============ 版本自检（绕过 SW 与 HTTP 缓存，直连服务器问最新版本） ============
+  // iOS 对 SW 更新检查极保守（默认 24h 一次，主屏幕 PWA 几乎不触发），
+  // 而手机上还可能是旧版 cache-first SW（导航直接返回旧 HTML，新代码永不执行）。
+  // 这里用带时间戳的请求绕开所有缓存拿 version.json，让页面"自证过期"后主动更新。
+  function checkRemoteVersion() {
+    try {
+      fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(res => { if (!res.ok) throw new Error('bad status'); return res.json(); })
+        .then(data => {
+          if (!data || !data.version) return;
+          const remote = String(data.version);
+          if (remote === APP_VERSION) return;                    // 当前代码已是最新
+          if (localStorage.getItem('wwAppVer') === remote) return; // 本版本已提示过，避免重复打扰
+          localStorage.setItem('wwAppVer', remote);
+          // 触发 SW 更新（若新版代码已含增强注册逻辑，会走 controllerchange 自动刷新）
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistration()
+              .then(r => { if (r && r.update) return r.update(); })
+              .catch(() => {});
+          }
+          // iOS 兜底：8 秒内未自动刷新 → 显示持久引导横幅
+          setTimeout(() => { if (!refreshing) showUpdateBanner(remote); }, 8000);
+        })
+        .catch(() => { /* 断网/解析失败静默跳过，不影响使用 */ });
+    } catch (e) { /* 静默 */ }
+  }
+
+  // ============ Service Worker 注册 + 持久化存储请求 + 版本更新监听 ============
   // 更新流程：部署新文件 → 打开 PWA（或点设置页「检查更新」）→ 浏览器发现新 sw.js 字节变化
   // → 安装新 SW（skipWaiting 立即激活）→ controllerchange → 本页自动刷新加载最新版
+  let refreshing = false; // 防重入：避免 controllerchange 后重复刷新
   if ('serviceWorker' in navigator) {
     (async () => {
       // 记录注册前页面是否已被 SW 控制：首次安装时不自动刷新，避免刚打开就多刷一次
@@ -3010,7 +3130,6 @@
         });
       }
       // 新 SW 接管页面 → 自动刷新一次，让用户立即看到最新版（防重入，避免无限刷新）
-      let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!hadController || refreshing) return;
         refreshing = true;
@@ -3026,6 +3145,8 @@
       }
     })();
   }
+  // 页面加载即检查一次远程版本（绕过缓存），断网时静默
+  checkRemoteVersion();
 </script>
 
 <script>
@@ -6300,18 +6421,35 @@
   $('importBackupInput').addEventListener('change', importBackupFile);
 
   // ============ 版本与更新 ============
-  // 每次发新版时同步更新这里：如 v3.1.0
-  const APP_VERSION = 'v3.0.0';
+  // APP_VERSION 已在全局脚本定义，此处只负责展示
   const appVerEl = $('appVersionText');
   if (appVerEl) appVerEl.textContent = APP_VERSION;
   $('checkUpdateRow').addEventListener('click', async () => {
     if (!('serviceWorker' in navigator)) { toast('当前环境不支持更新检查'); return; }
     toast('正在检查更新…');
     try {
+      // 1) 绕过缓存读取服务器最新版本（version.json 为唯一事实来源）
+      let remote = null;
+      try {
+        const res = await fetch('./version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const d = await res.json();
+          if (d && d.version) remote = String(d.version);
+        }
+      } catch (e) { /* 取不到服务器版本时仍走 SW 更新路径 */ }
+      // 2) 触发 Service Worker 更新
       const reg = await navigator.serviceWorker.getRegistration();
       if (!reg) { toast('未找到应用服务，无法检查更新'); return; }
-      await reg.update();
-      toast('已是最新版本');
+      if (reg.update) await reg.update();
+      // 3) 判断结果：服务器有比当前页面更新的版本 → 引导更新；否则提示已最新
+      if (remote && remote !== APP_VERSION && localStorage.getItem('wwAppVer') !== remote) {
+        localStorage.setItem('wwAppVer', remote);
+        toast('发现新版本 ' + remote + '，正在更新…');
+        // 兜底：3 秒内未自动刷新则弹横幅引导手动刷新/重开
+        setTimeout(() => { if (!refreshing) showUpdateBanner(remote); }, 3000);
+      } else {
+        toast('已是最新版本');
+      }
     } catch (e) {
       toast('检查更新失败：' + e.message);
     }
