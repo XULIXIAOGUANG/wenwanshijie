@@ -65,7 +65,7 @@
   .page {
     min-height: 100%;
     min-height: 100dvh;
-    padding: calc(52px + env(safe-area-inset-top)) 16px calc(90px + env(safe-area-inset-bottom));
+    padding: calc(52px + env(safe-area-inset-top)) 16px calc(120px + env(safe-area-inset-bottom));
     display: none;
     flex-direction: column;
     gap: 16px;
@@ -414,6 +414,100 @@
   .switch.on::after { left: 21px; }
   .chevron { color: var(--text-sub); font-size: 16px; font-weight: 400; }
 
+  /* ======== 局域网同步（三端共用） ======== */
+  .sync-status-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 0;
+  }
+  .sync-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #C9CBC6; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .sync-dot.on { background: var(--primary-deep); box-shadow: 0 0 0 3px rgba(92,143,110,0.15); }
+  .sync-dot.syncing { background: var(--primary-deep); animation: syncPulse 1s ease-in-out infinite; }
+  @keyframes syncPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .sync-status-text {
+    font-size: 12px; color: var(--text-sub);
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sync-addr-row { display: flex; gap: 8px; margin: 12px 0 8px; }
+  .sync-input {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 13px;
+    outline: none;
+    background: var(--page-bg);
+    color: var(--text-main);
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .sync-input:focus { border-color: var(--primary-deep); box-shadow: 0 0 0 2px rgba(92,143,110,0.12); }
+  .sync-input + .sync-input { margin-top: 8px; }
+  .sync-detect-btn {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 14px;
+    border: 1px solid var(--primary);
+    border-radius: 10px;
+    font-size: 12px; color: var(--primary-deep); font-weight: 600;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sync-detect-btn:active { transform: scale(0.96); }
+  .sync-detect-btn.disabled { opacity: 0.5; pointer-events: none; }
+  .sync-btn {
+    margin-top: 12px;
+    text-align: center;
+    padding: 12px 0;
+    border-radius: 12px;
+    font-size: 14px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg, var(--primary-deep), #4A7A5B);
+    box-shadow: 0 4px 12px rgba(92,143,110,0.25);
+    cursor: pointer;
+    transition: transform 0.15s, opacity 0.2s;
+  }
+  .sync-btn:active { transform: scale(0.97); }
+  .sync-btn.disabled { opacity: 0.55; pointer-events: none; }
+  .sync-host-local {
+    margin-top: 10px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: rgba(92,143,110,0.08);
+    font-size: 12px; color: var(--primary-deep);
+    word-break: break-all;
+    display: none;
+  }
+  .sync-log {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.7;
+    background: #F4F5F0;
+    color: var(--text-sub);
+    animation: syncLogIn 0.25s ease;
+  }
+  .sync-log.ok { background: rgba(92,143,110,0.10); color: var(--primary-deep); }
+  .sync-log.err { background: rgba(201,106,90,0.10); color: #B04A3B; }
+  @keyframes syncLogIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  #dataDirText { word-break: break-all; }
+  .data-dir-btn {
+    flex-shrink: 0;
+    padding: 5px 14px;
+    border-radius: 8px;
+    background: var(--primary);
+    color: var(--primary-deep);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .data-dir-btn:active { transform: scale(0.96); }
+
   /* ======== 布局模式 ======== */
   /* 总览：大字模式 */
   .overview.large .overview-stats { background: transparent; padding: 0; margin-top: 16px; gap: 0; }
@@ -713,6 +807,8 @@
   }
   .add-sheet.show, .filter-sheet.show { transform: translateY(0); }
   #catSheet { z-index: 95; }
+  #confirmMask { z-index: 99; }
+  #confirmSheet { z-index: 100; }
   .sheet-title {
     font-size: 15px; font-weight: 600;
     color: var(--text-main);
@@ -1225,9 +1321,12 @@
     gap: 12px;
     height: 160px;
     padding-top: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .chart-col {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 36px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1399,12 +1498,12 @@
   /* 右上角轻量编辑胶囊 */
   .detail-edit-btn {
     font-size: 13px; padding: 5px 14px; border-radius: 999px;
-    background: #fff; color: var(--primary-deep);
-    border: 1px solid var(--primary-light, #B8DCC3);
+    background: var(--primary-deep); color: #fff;
+    border: none; box-shadow: 0 2px 8px rgba(48, 87, 60, 0.28);
     cursor: pointer; user-select: none; font-weight: 500;
     transition: all 0.18s;
   }
-  .detail-edit-btn:active { background: var(--primary-bg); transform: scale(0.95); }
+  .detail-edit-btn:active { background: var(--primary); transform: scale(0.95); }
 
   /* 基础信息卡：展开/收起（柔和胶囊按钮） */
   .meta-expand {
@@ -2131,6 +2230,17 @@
         </div>
 
         <div class="card">
+          <div class="card-title"><span class="bar"></span>藏品分布</div>
+          <div class="seg-row ratio-seg" id="itemRatioNav">
+            <div class="seg-opt active" data-dim="cat">品类</div>
+            <div class="seg-opt" data-dim="shape">器型</div>
+            <div class="seg-opt" data-dim="mat">品种</div>
+            <div class="seg-opt" data-dim="grade">等级</div>
+          </div>
+          <div id="itemRatioList"></div>
+        </div>
+
+        <div class="card">
           <div class="card-title"><span class="bar"></span>月度花销</div>
           <div class="chart" id="statsChart">
             <div class="chart-col">
@@ -2169,17 +2279,6 @@
               <div class="chart-x"><b>8月</b></div>
             </div>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="bar"></span>藏品分布</div>
-          <div class="seg-row ratio-seg" id="itemRatioNav">
-            <div class="seg-opt active" data-dim="cat">品类</div>
-            <div class="seg-opt" data-dim="shape">器型</div>
-            <div class="seg-opt" data-dim="mat">品种</div>
-            <div class="seg-opt" data-dim="grade">等级</div>
-          </div>
-          <div id="itemRatioList"></div>
         </div>
 
         <div class="card">
@@ -2327,6 +2426,52 @@
             <input type="file" id="importBackupInput" accept=".json,application/json" style="display:none;">
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-title"><span class="bar"></span>局域网同步</div>
+          <div class="group">
+            <div class="toggle-row">
+              <div class="toggle-label">一键同步
+                <small>手机与电脑连同一 WiFi，把两台设备的数据合并成一份（互为备份）</small>
+              </div>
+            </div>
+            <div class="sync-status-row">
+              <span class="sync-dot" id="syncDot"></span>
+              <span class="sync-status-text" id="syncStatusText">本机数据已就绪，等待同步</span>
+            </div>
+            <div class="sync-addr-row">
+              <input class="sync-input" id="syncHostInput" type="text" placeholder="电脑端地址，如 192.168.1.5" autocomplete="off">
+              <div class="sync-detect-btn" id="syncDetectBtn">自动发现</div>
+            </div>
+            <input class="sync-input" id="syncPinInput" type="text" placeholder="同步口令（电脑端已设置时才需填写）" autocomplete="off">
+            <div class="sync-btn" id="syncBtn">一键同步</div>
+            <div class="sync-host-local" id="syncHostLocal"></div>
+            <div class="sync-log" id="syncLog" style="display:none;"></div>
+          </div>
+        </div>
+
+        <div class="card" id="desktopHostCard" style="display:none;">
+          <div class="card-title"><span class="bar"></span>同步主机（桌面版）</div>
+          <div class="group">
+            <div class="toggle-row">
+              <div class="toggle-label">开启同步主机
+                <small>开启后手机 / 平板可在同一 WiFi 下一键同步</small>
+              </div>
+              <div class="switch on" id="hostSwitch"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-label">端口
+                <small id="hostPortText">4789</small>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-label">数据存储位置
+                <small id="dataDirText">…</small>
+              </div>
+              <div class="data-dir-btn" id="dataDirBtn">更改</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ======== 藏品详情页 ======== -->
@@ -2401,6 +2546,15 @@
         <span>未命名藏品</span>
       </div>
 
+      <div class="sheet-label">照片（可选，支持多图，最多 9 张）</div>
+      <div class="photo-grid" id="itemPhotoGrid">
+        <div class="photo-upload" id="itemPhotoBox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+          <span>添加照片</span>
+        </div>
+      </div>
+      <input type="file" accept="image/*" id="itemPhotoInput" multiple hidden>
+
       <div class="sheet-label">品类</div>
       <div class="opt-chips" id="itemCatChips"></div>
 
@@ -2459,15 +2613,6 @@
         <div class="opt-chip" data-v="7">每周</div>
         <div class="opt-chip" data-v="30">每月</div>
         <div class="opt-chip" data-v="90">每季度</div>
-      </div>
-
-      <div class="sheet-label">照片（可选，支持多图，最多 9 张）</div>
-      <div class="photo-grid" id="itemPhotoGrid">
-        <div class="photo-upload" id="itemPhotoBox">
-          <input type="file" accept="image/*" id="itemPhotoInput" multiple hidden>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
-          <span>添加照片</span>
-        </div>
       </div>
 
       <div class="sheet-label">备注（可选）</div>
@@ -2534,11 +2679,11 @@
       <div class="sheet-label">照片（可选，最多 9 张）</div>
       <div class="photo-grid" id="recordPhotoGrid">
         <div class="photo-upload" id="recordPhotoBox">
-          <input type="file" accept="image/*" id="recordPhotoInput" multiple hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
           <span>添加照片</span>
         </div>
       </div>
+      <input type="file" accept="image/*" id="recordPhotoInput" multiple hidden>
       <div class="sheet-label">盘玩心得</div>
       <textarea class="form-textarea" id="recordNoteInput" placeholder="写下今天的盘玩心得…" rows="3"></textarea>
       <div class="sheet-actions">
@@ -2692,6 +2837,8 @@
 
   <div class="sheet-label">备注（可选）</div>
   <textarea class="form-textarea" id="ledgerNoteInput" placeholder="备注…" rows="2"></textarea>
+
+  <div class="sheet-btn danger-soft" id="ledgerDelBtn" style="display:none;margin-top:12px;">删除此记录</div>
 
   <div class="sheet-actions">
     <div class="sheet-btn ghost" id="ledgerResetBtn">重置</div>
@@ -2870,8 +3017,11 @@
     Object.keys(pagesMap).forEach(k => {
       pagesMap[k].classList.toggle('active', k === key);
     });
+    currentTab = key;
     if (key === 'home') renderHome();
     if (key === 'stats') renderStats();
+    if (key === 'items') renderItems();
+    if (key === 'ledger') renderLedger();
     document.querySelector('.screen').scrollTop = 0;
   }
   // ======== 首页 / 统计页 数据联动 ========
@@ -3033,7 +3183,7 @@
     strip.innerHTML = pinned.map(it => {
       const img = firstImage(it);
       const imgHtml = img
-        ? '<img class="fav-card-img" src="' + img + '" alt="最近常盘" onerror="this.style.display=\'none\'">'
+        ? '<img class="fav-card-img" src="' + img + '" alt="最近常盘" loading="lazy" onerror="this.style.display=\'none\'">'
         : '<div class="fav-card-img" style="display:flex;align-items:center;justify-content:center;background:#fff;color:var(--primary-deep);"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">' + (iconPaths[it.icon] || iconPaths[iconForCat(it.cat)] || '') + '</svg></div>';
       return '<div class="fav-card" data-id="' + it.id + '">' + imgHtml +
         '<div class="fav-card-name">' + (it.nickName || displayName(it)) + '</div>' +
@@ -3046,7 +3196,7 @@
     const rec = p.rec;
     const img = (rec.images && rec.images.length) ? rec.images[0] : firstImage(it);
     const imgHtml = img
-      ? '<img class="list-img" src="' + img + '" alt="">'
+      ? '<img class="list-img" src="' + img + '" alt="" loading="lazy">'
       : '<div class="list-img" style="background:var(--primary-bg);display:flex;align-items:center;justify-content:center;color:var(--primary-deep);">' + (rec.emoji || '✓') + '</div>';
     const brief = (rec.emoji ? rec.emoji + ' ' : '') + (rec.mood || '');
     return '<div class="list-item" data-id="' + it.id + '">' + imgHtml +
@@ -3206,8 +3356,15 @@
     list.classList.toggle('expanded', itemRatioExpanded);
     btn.textContent = itemRatioExpanded ? '收起' : '展开全部 ' + list.children.length + ' 项';
   });
-  // 数据变更后统一刷新首页与统计
-  function refreshAll() { renderHome(); renderStats(); }
+  // 数据变更后统一刷新当前页（避免全量重绘所有 tab）
+  let currentTab = 'home';
+  function refreshAll() {
+    if (currentTab === 'items') renderItems();
+    else if (currentTab === 'ledger') renderLedger();
+    else if (currentTab === 'stats') renderStats();
+    else renderHome();
+  }
+  function markDirty(x) { if (x) x._dirty = true; }
   tabItems.forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
@@ -3353,23 +3510,21 @@
     if (typeof it.fav !== 'boolean') it.fav = !!it.pinned;
     if (typeof it.pinned !== 'boolean') it.pinned = !!it.fav;
   });
-  // 快照：保存时 diff 出新增/修改/删除，自动打 updatedAt / 墓碑（同步引擎的数据基础）
-  let _itemsSnap = ITEMS.map(it => JSON.parse(JSON.stringify(it)));
+  // 快照：仅保留 id 引用用于删除检测 → 记墓碑（同步引擎删除依据）
+  // 变更项打点由 dirty 标记驱动（修改入口 markDirty），新增/旧数据由 !updatedAt 兜底
+  let _itemsSnap = ITEMS.slice();
   function saveItems() {
     const now = Date.now();
-    const lastMap = new Map(_itemsSnap.map(i => [i.id, i]));
-    const curIds = new Set();
+    const curIds = new Set(ITEMS.map(i => i.id));
     ITEMS.forEach(it => {
-      curIds.add(it.id);
-      const old = lastMap.get(it.id);
-      const changed = !old || JSON.stringify(old) !== JSON.stringify(it);
-      if (changed) { it.updatedAt = now; it.deviceId = DEVICE_ID; }
+      if (it._dirty || !it.updatedAt) { it.updatedAt = now; it.deviceId = DEVICE_ID; }
       if (!it.updatedAt) it.updatedAt = now;
       if (!it.deviceId) it.deviceId = DEVICE_ID;
+      delete it._dirty;
     });
     // 检测本次保存中被删除的藏品 → 记墓碑（不物理抹除，供同步删除）
     _itemsSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('item', old.id, old.name); });
-    _itemsSnap = ITEMS.map(it => JSON.parse(JSON.stringify(it)));
+    _itemsSnap = ITEMS.slice();
     wwStore.set('wwItems', JSON.stringify(ITEMS));
     refreshAll();
   }
@@ -3405,21 +3560,18 @@
     return DEFAULT_LEDGER.slice();
   }
   let ledger = loadLedger();
-  let _ledgerSnap = ledger.map(r => JSON.parse(JSON.stringify(r)));
+  let _ledgerSnap = ledger.slice();
   function saveLedger() {
     const now = Date.now();
-    const lastMap = new Map(_ledgerSnap.map(r => [r.id, r]));
-    const curIds = new Set();
+    const curIds = new Set(ledger.map(r => r.id));
     ledger.forEach(r => {
-      curIds.add(r.id);
-      const old = lastMap.get(r.id);
-      const changed = !old || JSON.stringify(old) !== JSON.stringify(r);
-      if (changed) { r.updatedAt = now; r.deviceId = DEVICE_ID; }
+      if (r._dirty || !r.updatedAt) { r.updatedAt = now; r.deviceId = DEVICE_ID; }
       if (!r.updatedAt) r.updatedAt = now;
       if (!r.deviceId) r.deviceId = DEVICE_ID;
+      delete r._dirty;
     });
     _ledgerSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('ledger', old.id, old.name); });
-    _ledgerSnap = ledger.map(r => JSON.parse(JSON.stringify(r)));
+    _ledgerSnap = ledger.slice();
     wwStore.set('wwLedger', JSON.stringify(ledger));
     refreshAll();
   }
@@ -3713,7 +3865,7 @@
 
   function itemCardHtml(it) {
     const imgPart = firstImage(it)
-      ? '<img class="item-card-img" src="' + firstImage(it) + '" alt="">'
+      ? '<img class="item-card-img" src="' + firstImage(it) + '" alt="" loading="lazy">'
       : '<div class="item-card-img" style="color: var(--primary-deep);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' + iconPaths[it.icon] + '</svg></div>';
     const pricePart = prefs.showCardPrice
       ? (it.status === 'sold'
@@ -3765,10 +3917,12 @@
     if (itemSearch) { itemSearch = ''; itemSearchInput.value = ''; itemSearchClear.classList.add('hidden'); renderItems(); }
   }
   itemSearchBtn.addEventListener('click', openItemSearch);
+  let itemSearchTimer = null;
   itemSearchInput.addEventListener('input', () => {
     itemSearch = itemSearchInput.value.trim().toLowerCase();
     itemSearchClear.classList.toggle('hidden', !itemSearch);
-    renderItems();
+    clearTimeout(itemSearchTimer);
+    itemSearchTimer = setTimeout(renderItems, 200);
   });
   itemSearchInput.addEventListener('blur', () => setTimeout(closeItemSearch, 120));
   itemSearchClear.addEventListener('mousedown', e => e.preventDefault());
@@ -3792,6 +3946,7 @@
       if (!it || it.status === 'sold') return;
       const now = !(it.fav || it.pinned);
       it.fav = now; it.pinned = now;
+      markDirty(it);
       saveItems();
       renderItems();
       renderFavorite();
@@ -4142,6 +4297,7 @@
     if (!it) return;
     const now = !(it.fav || it.pinned);
     it.fav = now; it.pinned = now;
+    markDirty(it);
     saveItems();
     renderDetail();
     renderItems();
@@ -4268,6 +4424,7 @@
     const it = ITEMS.find(x => x.id === detailId);
     if (!it) return;
     it.sections = detailSecState.filter(s => s.type === 'text' ? (s.content || '').trim() : s.url);
+    markDirty(it);
     saveItems();
     renderDetail();
     closeDetailSecPanel();
@@ -4287,14 +4444,15 @@
   const RECORD_MOODS = [
     { emoji: '😊', label: '开心' }, { emoji: '🤩', label: '惊艳' },
     { emoji: '😌', label: '平静' }, { emoji: '😤', label: '努力' },
-    { emoji: '😴', label: '偷懒' }, { emoji: '🥹', label: '心疼' }
+    { emoji: '😴', label: '偷懒' }, { emoji: '🥹', label: '心疼' },
+    { emoji: '', label: '不选' }
   ];
   let recordEditId = null;       // null = 新增
   let recordImgs = [];
   let recordMood = RECORD_MOODS[0];
   function renderRecordMoodRow() {
     $('recordMoodRow').innerHTML = RECORD_MOODS.map(m =>
-      '<div class="mood-chip' + (recordMood && recordMood.emoji === m.emoji ? ' active' : '') + '" data-emoji="' + m.emoji + '" data-label="' + m.label + '" title="' + m.label + '">' + m.emoji + '</div>'
+      '<div class="mood-chip' + (recordMood && recordMood.emoji === m.emoji ? ' active' : '') + '" data-emoji="' + m.emoji + '" data-label="' + m.label + '" title="' + m.label + '">' + (m.emoji || '不选') + '</div>'
     ).join('');
     $('recordMoodRow').querySelectorAll('.mood-chip').forEach(c => {
       c.addEventListener('click', () => {
@@ -4376,8 +4534,8 @@
     const rec = {
       id: recordEditId || Date.now(),
       date,
-      emoji: recordMood.emoji,
-      mood: recordMood.label,
+      emoji: recordMood.emoji || '',
+      mood: recordMood.emoji ? recordMood.label : '',
       note,
       images: recordImgs.slice()
     };
@@ -4388,6 +4546,7 @@
       if (!Array.isArray(it.records)) it.records = [];
       it.records.unshift(rec);
     }
+    markDirty(it);
     saveItems();
     renderDetail();
     closeRecordPanel();
@@ -4398,6 +4557,7 @@
     if (!it) return;
     if (!confirm('确定删除这条盘玩记录吗？')) return;
     it.records = (it.records || []).filter(x => x.id !== rid);
+    markDirty(it);
     saveItems();
     renderDetail();
     toast('记录已删除');
@@ -4843,7 +5003,7 @@
       right = '<div class="amount">-¥' + fmtMoney(r.amount) + '</div>';
     }
     const img = r.img
-      ? '<img class="list-img" src="' + r.img + '" alt="">'
+      ? '<img class="list-img" src="' + r.img + '" alt="" loading="lazy">'
       : '<div class="list-img" style="background:var(--primary-bg);display:flex;align-items:center;justify-content:center;color:' + (r.type === 'income' ? 'var(--income)' : 'var(--primary-deep)') + ';">' + ledgerIconHtml(r) + '</div>';
     return '<div class="list-item" data-lid="' + r.id + '"' + (r.itemId ? ' data-id="' + r.itemId + '"' : '') + '>' + img +
       '<div class="list-info"><div class="list-name">' + r.name + '</div>' +
@@ -5376,6 +5536,7 @@
       const item = ITEMS.find(x => x.id === editId);
       if (!item) return;
       Object.assign(item, common);
+      markDirty(item);
       // 状态联动兜底：在盘清理售出字段，已售补齐售出日期/价格（防天数截断与卡片白屏）
       if (item.status === 'active') {
         delete item.soldDate; delete item.sellPrice; delete item.sellDate;
@@ -5446,6 +5607,7 @@
     it.status = 'sold';
     it.sellPrice = price;
     it.soldDate = date;
+    markDirty(it);
     saveItems();
     const nm = it.nickName || displayName(it);
     let rid = nextLedgerId();
@@ -5493,6 +5655,7 @@
       onConfirm: () => {
         ITEMS = ITEMS.filter(x => x.id !== id);
         ledger = ledger.filter(r => r.itemId !== id);
+        wwStore.set('ww_noSeed', '1');
         saveItems();
         saveLedger();
         renderNav();
@@ -5627,6 +5790,7 @@
   function openLedgerSheet(pre) {
     const p = pre || {};
     ledgerEditId = null;
+    $('ledgerDelBtn').style.display = 'none';
     $('ledgerSheetTitle').textContent = '记一笔';
     ledgerForm = { type: p.type || 'expense', cat: p.cat || 'tool', itemId: null };
     const preIncome = ledgerForm.type === 'income';
@@ -5647,6 +5811,7 @@
   function openLedgerSheetEdit(r) {
     if (!r) return;
     ledgerEditId = r.id;
+    $('ledgerDelBtn').style.display = '';
     // 分类「buy」在弹层中无对应 chip，归入「其他」；care 保持支出侧
     ledgerForm = {
       type: r.type === 'care' ? 'expense' : r.type,
@@ -5758,15 +5923,18 @@
         img: linkedItem ? firstImage(linkedItem) : editingRec.img,
         itemId: linkedItem ? linkedItem.id : editingRec.itemId
       });
+      markDirty(editingRec);
       // 编辑后同步到关联藏品详情
       if (ledgerForm.cat === 'express' && editingRec.expressKind === 'buy' && linkedItem) {
         linkedItem.shipFee = amount;
+        markDirty(linkedItem);
         saveItems();
         renderItems();
       } else if (ledgerForm.cat === 'sale' && linkedItem) {
         linkedItem.sellPrice = amount;
         linkedItem.soldDate = date;
         if (linkedItem.status !== 'sold') linkedItem.status = 'sold';
+        markDirty(linkedItem);
         saveItems();
         renderItems();
       }
@@ -5810,6 +5978,7 @@
       linkedItem.status = 'sold';
       linkedItem.sellPrice = amount;
       linkedItem.soldDate = date;
+      markDirty(linkedItem);
       saveItems();
       renderItems();
     }
@@ -5836,6 +6005,15 @@
   $('ledgerSheetClose').addEventListener('click', closeLedgerSheet);
   ledgerMaskEl.addEventListener('click', closeLedgerSheet);
   $('ledgerSaveBtn').addEventListener('click', saveLedgerSheet);
+  $('ledgerDelBtn').addEventListener('click', () => {
+    if (ledgerEditId == null) return;
+    if (!confirm('确定删除这条账本记录吗？')) return;
+    ledger = ledger.filter(r => r.id !== ledgerEditId);
+    saveLedger();
+    renderLedger();
+    closeLedgerSheet();
+    toast('记录已删除');
+  });
   $('ledgerResetBtn').addEventListener('click', () => {
     if (ledgerEditId != null) {
       const r = ledger.find(x => x.id === ledgerEditId);
@@ -6077,6 +6255,279 @@
   $('importBackupRow').addEventListener('click', () => $('importBackupInput').click());
   $('importBackupInput').addEventListener('change', importBackupFile);
 
+  // ============ 局域网一键同步（客户端引擎，三端共用） ============
+  // 数据契约：完整数据集 { wwItems, wwLedger, wwCats, wwTombstones }
+  // 合并逻辑只存在于主机端（桌面同步服务器），客户端仅导出/推送/回写，保持单份合并引擎
+  const SYNC_PORT = 4789;
+
+  function syncBaseUrl(host) {
+    let h = (host || '').trim();
+    if (!h) return '';
+    if (!/^https?:\/\//i.test(h)) h = 'http://' + h;
+    return h.replace(/\/+$/, '');
+  }
+
+  function syncFetch(host, path, options, timeoutMs) {
+    const base = syncBaseUrl(host);
+    if (!base) return Promise.reject(new Error('地址为空'));
+    const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 8000) : null;
+    const opt = Object.assign({}, options || {}, { cache: 'no-store' });
+    if (ctrl) opt.signal = ctrl.signal;
+    return fetch(base + path, opt).then(res => {
+      if (timer) clearTimeout(timer);
+      if (!res.ok) {
+        return res.json().then(j => { const e = new Error((j && j.message) || 'HTTP ' + res.status); e.status = res.status; throw e; })
+          .catch(err => { if (err && err.status) throw err; throw new Error('HTTP ' + res.status); });
+      }
+      return res.json();
+    }).catch(err => { if (timer) clearTimeout(timer); throw err; });
+  }
+
+  function getDeviceName() {
+    const n = (wwStore.get('appName') || '').trim();
+    if (n) return n;
+    const ua = navigator.userAgent || '';
+    if (/Android/i.test(ua)) return '安卓设备';
+    if (/Windows/i.test(ua)) return 'Windows 设备';
+    if (/iPhone|iPad/i.test(ua)) return 'iPhone';
+    return '浏览器设备';
+  }
+
+  // 本机局域网 IP（桌面端由主进程提供；浏览器端受限返回空）
+  function getLocalIPs() {
+    try {
+      if (wwStore.isElectron && window.electronAPI && typeof window.electronAPI.getLocalIPs === 'function') {
+        const r = window.electronAPI.getLocalIPs();
+        return Array.isArray(r) ? r : [];
+      }
+    } catch (e) { /* ignore */ }
+    return [];
+  }
+
+  // 导出完整数据集（类目池从存储读取原始结构，保证含 _dims/_updatedAt）
+  function exportDataset() {
+    let catsRaw = null;
+    try { catsRaw = JSON.parse(wwStore.get('wwCats') || 'null'); } catch (e) { catsRaw = null; }
+    if (!catsRaw || !catsRaw['品类']) catsRaw = Object.assign({}, POOLS, { _dims: CAT_DIMS });
+    return {
+      wwItems: JSON.parse(JSON.stringify(ITEMS)),
+      wwLedger: JSON.parse(JSON.stringify(ledger)),
+      wwCats: catsRaw,
+      wwTombstones: JSON.parse(JSON.stringify(TOMBSTONES))
+    };
+  }
+
+  // 校验并回写合并后的完整数据集，随后刷新全部界面状态
+  function applyMerged(data) {
+    if (!data || typeof data !== 'object') throw new Error('同步返回的数据格式不正确');
+    if (Array.isArray(data.wwItems)) {
+      ITEMS = data.wwItems;
+      _itemsSnap = ITEMS.slice();
+      wwStore.set('wwItems', JSON.stringify(ITEMS));
+    }
+    if (Array.isArray(data.wwLedger)) {
+      ledger = data.wwLedger;
+      _ledgerSnap = ledger.slice();
+      wwStore.set('wwLedger', JSON.stringify(ledger));
+    }
+    if (data.wwCats && typeof data.wwCats === 'object' && Array.isArray(data.wwCats['品类'])) {
+      wwStore.set('wwCats', JSON.stringify(data.wwCats));
+      // POOLS 为 const，原位同步新值
+      const np = loadPools();
+      Object.keys(POOLS).forEach(k => { if (!(k in np)) delete POOLS[k]; });
+      Object.keys(np).forEach(k => { POOLS[k] = np[k]; });
+    }
+    if (Array.isArray(data.wwTombstones)) {
+      TOMBSTONES = data.wwTombstones;
+      saveTombstones();
+    }
+    refreshAll();
+    if (typeof renderNav === 'function') renderNav();
+    if (typeof renderItems === 'function') renderItems();
+    if (typeof renderLedger === 'function') renderLedger();
+    if (typeof syncFilterUI === 'function') syncFilterUI();
+    if (typeof updateFilterBadges === 'function') updateFilterBadges();
+    if (typeof applyActiveFilter === 'function') applyActiveFilter();
+    if (typeof renderStats === 'function') renderStats();
+  }
+
+  // 一键同步主流程：探测主机 → 推送本地数据集 → 主机双向合并 → 校验回写
+  function doSync(host, pin) {
+    const base = syncBaseUrl(host);
+    if (!base) return Promise.reject(new Error('请先填写电脑端同步地址'));
+    return syncFetch(base, '/api/info', { method: 'GET' }, 6000)
+      .then(info => {
+        if (!info || !info.ok) throw new Error('无法连接同步主机，请检查地址与网络');
+        const payload = {
+          deviceId: DEVICE_ID,
+          deviceName: getDeviceName(),
+          pin: (pin || '').trim(),
+          data: exportDataset()
+        };
+        return syncFetch(base, '/api/sync/merge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }, 20000);
+      })
+      .then(res => {
+        if (!res || !res.ok) throw new Error((res && res.message) || '同步失败');
+        if (!res.data || typeof res.data !== 'object') throw new Error('同步返回数据异常');
+        applyMerged(res.data);
+        return res.stats || { added: 0, updated: 0, removed: 0 };
+      });
+  }
+
+  // 自动发现：扫描本机网段前 40 个主机，找到响应 /api/info 的同步主机（桌面端可直接用，浏览器端无本机 IP 时跳过）
+  function discoverHost() {
+    const ips = getLocalIPs();
+    if (!ips.length) return Promise.resolve(null);
+    const m = (ips[0] || '').match(/^(\d+\.\d+\.\d+)\.\d+$/);
+    if (!m) return Promise.resolve(null);
+    const targets = [];
+    for (let i = 1; i <= 40; i++) targets.push(m[1] + '.' + i);
+    return Promise.all(targets.map(ip =>
+      syncFetch(ip, '/api/info', { method: 'GET' }, 900)
+        .then(r => (r && r.ok) ? ip : null)
+        .catch(() => null)
+    )).then(list => list.find(Boolean) || null);
+  }
+
+  // ---- 设置页「局域网同步」区块交互绑定 ----
+  const syncHostInput = $('syncHostInput');
+  const syncPinInput = $('syncPinInput');
+  const syncBtnEl = $('syncBtn');
+  const syncDotEl = $('syncDot');
+  const syncStatusText = $('syncStatusText');
+  const syncLogEl = $('syncLog');
+  const syncDetectBtn = $('syncDetectBtn');
+  const syncHostLocal = $('syncHostLocal');
+
+  function syncLogLine(cls, html) {
+    syncLogEl.innerHTML = html;
+    syncLogEl.className = 'sync-log' + (cls ? ' ' + cls : '');
+    syncLogEl.style.display = 'block';
+  }
+  function syncSetBusy(busy) {
+    syncBtnEl.classList.toggle('disabled', busy);
+    syncBtnEl.textContent = busy ? '同步中…' : '一键同步';
+    syncDotEl.classList.toggle('syncing', busy);
+    if (busy) syncLogEl.style.display = 'none';
+  }
+  function syncStatus(text, ok) {
+    syncStatusText.textContent = text;
+    syncDotEl.classList.toggle('on', !!ok);
+  }
+
+  // 记忆上次填写的地址与口令
+  if (prefs.syncHost) syncHostInput.value = prefs.syncHost;
+  if (prefs.syncPin) syncPinInput.value = prefs.syncPin;
+
+  // 本机同步地址展示：桌面端由主进程注入；浏览器端有本机 IP 时直接显示
+  let _localAddrs = getLocalIPs();
+  if (wwStore.isElectron && window.electronAPI && typeof window.electronAPI.getSyncInfo === 'function') {
+    try {
+      const info = window.electronAPI.getSyncInfo();
+      if (info && info.addresses && info.addresses.length) {
+        syncHostLocal.style.display = 'block';
+        syncHostLocal.textContent = '本机同步地址：http://' + info.addresses[0] + ':' + (info.port || SYNC_PORT) + '（手机填这个）';
+      }
+    } catch (e) { /* ignore */ }
+  } else if (_localAddrs.length) {
+    syncHostLocal.style.display = 'block';
+    syncHostLocal.textContent = '本机同步地址：http://' + _localAddrs[0] + ':' + SYNC_PORT + '（手机填这个）';
+  }
+
+  // 自动发现主机（扫描本机网段）
+  syncDetectBtn.addEventListener('click', () => {
+    if (syncDetectBtn.classList.contains('disabled')) return;
+    if (!getLocalIPs().length) { toast('当前设备无法自动发现，请手动输入电脑端地址'); return; }
+    syncDetectBtn.classList.add('disabled');
+    syncDetectBtn.textContent = '扫描中…';
+    discoverHost().then(ip => {
+      if (ip) {
+        syncHostInput.value = ip;
+        syncStatus('已发现同步主机：' + ip, true);
+        toast('已发现电脑端：' + ip);
+      } else {
+        syncStatus('未发现电脑端，请确认电脑已打开并开启同步主机', false);
+        toast('未发现电脑端');
+      }
+    }).finally(() => {
+      syncDetectBtn.classList.remove('disabled');
+      syncDetectBtn.textContent = '自动发现';
+    });
+  });
+
+  // 一键同步
+  syncBtnEl.addEventListener('click', () => {
+    const host = syncHostInput.value.trim();
+    if (!host) { toast('请先填写电脑端同步地址'); syncStatus('请填写电脑端同步地址', false); return; }
+    syncSetBusy(true);
+    syncStatus('正在连接同步主机…', false);
+    doSync(host, syncPinInput.value)
+      .then(stats => {
+        syncStatus('同步完成', true);
+        syncLogLine('ok',
+          '<b>同步完成</b><br>新增 ' + stats.added + ' · 更新 ' + stats.updated + ' · 删除 ' + stats.removed +
+          '<br>本机数据已与电脑端合并一致'
+        );
+        toast('同步完成：新增 ' + stats.added + '，更新 ' + stats.updated + '，删除 ' + stats.removed);
+      })
+      .catch(err => {
+        syncStatus('同步失败', false);
+        syncLogLine('err', '同步失败：' + (err.message || '网络异常') + '<br>请确认电脑端应用已打开、已开启同步主机，且两台设备在同一 WiFi');
+      })
+      .finally(() => syncSetBusy(false));
+  });
+
+  // 输入后自动记忆地址与口令
+  syncHostInput.addEventListener('change', () => { prefs.syncHost = syncHostInput.value.trim(); savePrefs(); });
+  syncPinInput.addEventListener('change', () => { prefs.syncPin = syncPinInput.value.trim(); savePrefs(); });
+
+  // ---- 桌面端专属：同步主机状态 + 数据存储位置（仅 Electron 下显示与绑定） ----
+  const desktopHostCard = $('desktopHostCard');
+  if (wwStore.isElectron && window.electronAPI) {
+    desktopHostCard.style.display = 'block';
+    const hostSwitch = $('hostSwitch');
+    const hostPortText = $('hostPortText');
+    const dataDirText = $('dataDirText');
+    const dataDirBtn = $('dataDirBtn');
+    function refreshHostUI() {
+      try {
+        const st = window.electronAPI.getHostStatus();
+        hostSwitch.classList.toggle('on', !!st.running);
+        hostPortText.textContent = (st.port || SYNC_PORT) + '（局域网）';
+      } catch (e) { /* ignore */ }
+      try {
+        const d = window.electronAPI.getDataDir();
+        if (d && d.file) dataDirText.textContent = d.file;
+      } catch (e) { /* ignore */ }
+    }
+    hostSwitch.addEventListener('click', () => {
+      const next = !hostSwitch.classList.contains('on');
+      try {
+        const ok = window.electronAPI.setHostEnabled(next);
+        refreshHostUI();
+        toast(ok ? '同步主机已开启' : '同步主机已关闭');
+      } catch (e) { toast('操作失败'); }
+    });
+    dataDirBtn.addEventListener('click', () => {
+      try {
+        const r = window.electronAPI.chooseDataDir();
+        if (!r || r.canceled) return;
+        refreshHostUI();
+        if (r.ok) {
+          toast(r.migrated ? '存储位置已更改，数据已迁移到新目录' : '存储位置已确认');
+        } else if (r.message) {
+          toast('更改失败：' + r.message);
+        }
+      } catch (e) { toast('更改失败：' + e.message); }
+    });
+    refreshHostUI();
+  }
+
   // 设置页开关
   function syncPrefSwitches() {
     $('cardPriceSwitch').classList.toggle('on', prefs.showCardPrice);
@@ -6194,12 +6645,12 @@
       // 改名后同步：藏品字段 + 左栏分类 + 筛选状态（藏品页与账本筛选）
       const field = typeMap[catDim];
       if (field) {
-        ITEMS.forEach(it => { if (it[field] === oldV) it[field] = nv; });
+        ITEMS.forEach(it => { if (it[field] === oldV) { it[field] = nv; markDirty(it); } });
         saveItems();
         renderItems();
       }
       if (catDim === '渠道') {
-        ITEMS.forEach(it => { if (it.channel === oldV) it.channel = nv; });
+        ITEMS.forEach(it => { if (it.channel === oldV) { it.channel = nv; markDirty(it); } });
         saveItems();
       }
       navState.entries.forEach(en => { if (en.type === catDim && en.value === oldV) en.value = nv; });
