@@ -4438,6 +4438,58 @@
   function escapeHtml(str) {
     return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+  // ============ 图片压缩工具：>1MB 自动压缩后存储，≤1MB 直传原图，>10MB 拒绝 ============
+  // 手机照片普遍 2-5MB，直接 base64 存 localStorage 会撑爆空间，这里统一压缩到 JPEG 0.8
+  async function compressImageFile(file) {
+    // 1) 解码：优先 createImageBitmap（性能好、不触发缓存），iOS 老版本回退 <img> + object URL
+    let bmp = null;
+    try {
+      if (window.createImageBitmap) bmp = await createImageBitmap(file);
+    } catch (e) { bmp = null; }
+    if (!bmp) {
+      bmp = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片解码失败')); };
+        img.src = url;
+      });
+    }
+    // 2) 等比缩放：最长边限制 1280px
+    const MAX_SIDE = 1280;
+    let { width, height } = bmp;
+    if (width > MAX_SIDE || height > MAX_SIDE) {
+      const scale = Math.min(MAX_SIDE / width, MAX_SIDE / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    // 3) 白底填充（透明 PNG 转白）后重绘
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bmp, 0, 0, width, height);
+    // 4) 输出 JPEG dataURL（文玩照片无透明需求）
+    return canvas.toDataURL('image/jpeg', 0.8);
+  }
+  // 统一上传分支：≤1MB 直传；1MB~10MB 压缩；>10MB 拒绝
+  function readOrCompress(f, onOk) {
+    const rd = new FileReader();
+    rd.onload = () => onOk(rd.result);
+    if (f.size <= 1024 * 1024) {
+      rd.readAsDataURL(f);
+    } else if (f.size > 10 * 1024 * 1024) {
+      toast('图片过大，无法上传');
+    } else {
+      toast('正在压缩图片…');
+      compressImageFile(f).then(url => {
+        onOk(url);
+        toast('图片已自动压缩');
+      }).catch(() => rd.readAsDataURL(f)); // 压缩失败回退直读原图，不丢照片
+    }
+  }
   function previewDetailSecImg(src) { openDetailLightbox(src); }
   function closeDetail() {
     stopDetailAutoPlay();
@@ -4572,10 +4624,10 @@
     input.onchange = () => {
       const f = input.files && input.files[0];
       if (!f) return;
-      if (f.size > 1024 * 1024) { toast('已忽略超过 1MB 的图片'); return; }
-      const rd = new FileReader();
-      rd.onload = () => { detailSecState.push({ type: 'image', url: rd.result }); renderDetailSecList(); };
-      rd.readAsDataURL(f);
+      readOrCompress(f, url => {
+        detailSecState.push({ type: 'image', url });
+        renderDetailSecList();
+      });
     };
     input.click();
   }
@@ -4653,13 +4705,10 @@
     let remaining = 9 - recordImgs.length;
     if (remaining <= 0) { toast('最多上传 9 张图片'); return; }
     files.slice(0, remaining).forEach(f => {
-      if (f.size > 1024 * 1024) { toast('已忽略超过 1MB 的图片'); return; }
-      const rd = new FileReader();
-      rd.onload = () => {
-        recordImgs.push(rd.result);
+      readOrCompress(f, url => {
+        recordImgs.push(url);
         renderRecordPhotoGrid();
-      };
-      rd.readAsDataURL(f);
+      });
     });
   });
   function openRecordPanel(rid) {
@@ -5879,13 +5928,10 @@
     let remaining = 9 - itemPhotos.length;
     if (remaining <= 0) { toast('最多上传 9 张图片'); return; }
     files.slice(0, remaining).forEach(f => {
-      if (f.size > 1024 * 1024) { toast('已忽略超过 1MB 的图片'); return; }
-      const rd = new FileReader();
-      rd.onload = () => {
-        itemPhotos.push(rd.result);
+      readOrCompress(f, url => {
+        itemPhotos.push(url);
         renderItemPhotoGrid();
-      };
-      rd.readAsDataURL(f);
+      });
     });
   });
   // 渲染九宫格：已上传缩略图 + 删除角标 + 尾部添加按钮
