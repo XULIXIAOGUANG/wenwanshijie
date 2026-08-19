@@ -3251,9 +3251,58 @@
     { id: 11, name: '四座楼核桃', cat: '核桃', mat: '四座楼', shape: '', grade: '双金', brand: '', days: 180, pinned: false, status: 'sold', price: 900, sellPrice: 1300, size: '边43/肚37', nickName: '', channel: '', shipFee: 0, img: IMG_HT, buyDate: '2026-02-10', soldDate: '2026-07-15' },
     { id: 12, name: '蜜蜡手串', cat: '手串', mat: '蜜蜡', shape: '老型', grade: '金标', brand: '京工坊', days: 260, pinned: false, status: 'sold', price: 800, sellPrice: 1200, size: '10×12mm', nickName: '秋色', channel: '微拍堂', shipFee: 15, icon: 'gem', buyDate: '2025-11-14', soldDate: '2026-08-01' }
   ];
+  // ==================== 存储适配层（三端共用） ====================
+  // 浏览器/安卓 PWA → localStorage；Electron 桌面 → window.electronAPI（主进程读写 data.json，同步 IPC 桥接）
+  // 此后所有持久化读写一律走 wwStore，保证三端行为一致
+  const wwStore = {
+    isElectron: typeof window !== 'undefined' && !!window.electronAPI && typeof window.electronAPI.getData === 'function',
+    get: function (key) {
+      try {
+        if (wwStore.isElectron) { const v = window.electronAPI.getData(key); return v === null || v === undefined ? null : String(v); }
+        return localStorage.getItem(key);
+      } catch (e) { return null; }
+    },
+    set: function (key, value) {
+      try {
+        if (wwStore.isElectron) { window.electronAPI.setData(key, String(value)); return; }
+        localStorage.setItem(key, value);
+      } catch (e) { /* ignore */ }
+    },
+    remove: function (key) {
+      try {
+        if (wwStore.isElectron) { window.electronAPI.removeData(key); return; }
+        localStorage.removeItem(key);
+      } catch (e) { /* ignore */ }
+    }
+  };
+
+  // 设备唯一标识：首次运行生成并持久化（同步时用于区分来源）
+  let DEVICE_ID = wwStore.get('wwDeviceId') || '';
+  if (!DEVICE_ID) {
+    DEVICE_ID = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    wwStore.set('wwDeviceId', DEVICE_ID);
+  }
+
+  // 删除墓碑：被删除的藏品/账本记录保留 id+deletedAt，同步时按时间戳判定删除
+  let TOMBSTONES = [];
+  function loadTombstones() {
+    try {
+      const raw = JSON.parse(wwStore.get('wwTombstones') || 'null');
+      if (Array.isArray(raw)) TOMBSTONES = raw;
+    } catch (e) { TOMBSTONES = []; }
+  }
+  function saveTombstones() { wwStore.set('wwTombstones', JSON.stringify(TOMBSTONES)); }
+  function addTombstone(type, id, name) {
+    if (!id) return;
+    if (TOMBSTONES.some(t => t.type === type && t.id === id)) return;
+    TOMBSTONES.push({ type: type, id: id, name: name || '', deletedAt: Date.now() });
+    saveTombstones();
+  }
+  loadTombstones();
+
   function loadItems() {
     try {
-      let raw = JSON.parse(localStorage.getItem('wwItems') || 'null');
+      let raw = JSON.parse(wwStore.get('wwItems') || 'null');
       if (Array.isArray(raw) && raw.length) {
         // v2 数据迁移：旧数据无 images 多图字段 → 从 img 或同 id 默认示例补齐
         const defById = {};
@@ -3282,7 +3331,7 @@
         });
         // 合并缺失的默认示例藏品（如白狮子核桃），保证新示例一定可见；导入备份恢复后跳过合并，避免混入示例数据
         raw = raw.slice();
-        if (!localStorage.getItem('ww_noSeed')) {
+        if (!wwStore.get('ww_noSeed')) {
           DEFAULT_ITEMS.forEach(def => {
             if (!raw.some(it => it.id === def.id)) {
               const it = JSON.parse(JSON.stringify(def));
@@ -3304,7 +3353,26 @@
     if (typeof it.fav !== 'boolean') it.fav = !!it.pinned;
     if (typeof it.pinned !== 'boolean') it.pinned = !!it.fav;
   });
-  function saveItems() { localStorage.setItem('wwItems', JSON.stringify(ITEMS)); refreshAll(); }
+  // 快照：保存时 diff 出新增/修改/删除，自动打 updatedAt / 墓碑（同步引擎的数据基础）
+  let _itemsSnap = ITEMS.map(it => JSON.parse(JSON.stringify(it)));
+  function saveItems() {
+    const now = Date.now();
+    const lastMap = new Map(_itemsSnap.map(i => [i.id, i]));
+    const curIds = new Set();
+    ITEMS.forEach(it => {
+      curIds.add(it.id);
+      const old = lastMap.get(it.id);
+      const changed = !old || JSON.stringify(old) !== JSON.stringify(it);
+      if (changed) { it.updatedAt = now; it.deviceId = DEVICE_ID; }
+      if (!it.updatedAt) it.updatedAt = now;
+      if (!it.deviceId) it.deviceId = DEVICE_ID;
+    });
+    // 检测本次保存中被删除的藏品 → 记墓碑（不物理抹除，供同步删除）
+    _itemsSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('item', old.id, old.name); });
+    _itemsSnap = ITEMS.map(it => JSON.parse(JSON.stringify(it)));
+    wwStore.set('wwItems', JSON.stringify(ITEMS));
+    refreshAll();
+  }
   // ============ 账本流水数据 ============
   const DEFAULT_LEDGER = [
     { id: 1, type: 'care', category: 'care', amount: 0, date: '2026-08-12', time: '20:30', name: '小叶紫檀手串', note: '上油', img: IMG_XTZ },
@@ -3331,13 +3399,30 @@
   };
   function loadLedger() {
     try {
-      const raw = JSON.parse(localStorage.getItem('wwLedger') || 'null');
+      const raw = JSON.parse(wwStore.get('wwLedger') || 'null');
       if (Array.isArray(raw)) return raw;
     } catch (e) { /* ignore */ }
     return DEFAULT_LEDGER.slice();
   }
   let ledger = loadLedger();
-  function saveLedger() { localStorage.setItem('wwLedger', JSON.stringify(ledger)); refreshAll(); }
+  let _ledgerSnap = ledger.map(r => JSON.parse(JSON.stringify(r)));
+  function saveLedger() {
+    const now = Date.now();
+    const lastMap = new Map(_ledgerSnap.map(r => [r.id, r]));
+    const curIds = new Set();
+    ledger.forEach(r => {
+      curIds.add(r.id);
+      const old = lastMap.get(r.id);
+      const changed = !old || JSON.stringify(old) !== JSON.stringify(r);
+      if (changed) { r.updatedAt = now; r.deviceId = DEVICE_ID; }
+      if (!r.updatedAt) r.updatedAt = now;
+      if (!r.deviceId) r.deviceId = DEVICE_ID;
+    });
+    _ledgerSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('ledger', old.id, old.name); });
+    _ledgerSnap = ledger.map(r => JSON.parse(JSON.stringify(r)));
+    wwStore.set('wwLedger', JSON.stringify(ledger));
+    refreshAll();
+  }
   // 持有天数实时计算：在盘 = 购入日期 → 今天；已售 = 购入日期 → 售出日期截止（旧数据缺售出日期时回退到今天）
   function heldDays(it) {
     if (!it || !it.buyDate) return 0;
@@ -3419,7 +3504,7 @@
     let dimsRaw = null;
     let needSave = false;
     try {
-      const raw = JSON.parse(localStorage.getItem('wwCats') || 'null');
+      const raw = JSON.parse(wwStore.get('wwCats') || 'null');
       if (raw && raw['品类'] && raw['器型'] && raw['品种'] && raw['等级']) {
         const rawCats = Array.isArray(raw['品类']) ? raw['品类'].slice() : DEFAULT_POOLS['品类'].slice();
         const rawMats = (raw['材质'] && Array.isArray(raw['材质'])) ? raw['材质'].slice() : null;
@@ -3465,7 +3550,7 @@
         if (d.indexOf('品种') < 0 && d.indexOf('材质') < 0 && d.indexOf('器型') >= 0) d.unshift('材质');
       });
       const data = Object.assign({}, pools, { _dims: CAT_DIMS });
-      localStorage.setItem('wwCats', JSON.stringify(data));
+      wwStore.set('wwCats', JSON.stringify(data));
     }
     return pools;
   }
@@ -3494,8 +3579,9 @@
   }
   migrateItems();
   function savePools() {
+    POOLS._updatedAt = Date.now();
     const data = Object.assign({}, POOLS, { _dims: CAT_DIMS });
-    localStorage.setItem('wwCats', JSON.stringify(data));
+    wwStore.set('wwCats', JSON.stringify(data));
   }
   const DEFAULT_NAV = {
     品类: ['手串', '手持', '108长串', '核桃', '配饰'],
@@ -3510,7 +3596,7 @@
   const PREFS_KEY = 'wwPrefs';
   function loadPrefs() {
     try {
-      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null') || {};
+      const p = JSON.parse(wwStore.get(PREFS_KEY) || 'null') || {};
       return {
         showCardPrice: !!p.showCardPrice,
         showCatInName: p.showCatInName !== false,
@@ -3521,13 +3607,13 @@
     }
   }
   function savePrefs() {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    wwStore.set(PREFS_KEY, JSON.stringify(prefs));
   }
   let prefs = loadPrefs();
 
   function loadNav() {
     try {
-      const raw = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+      const raw = JSON.parse(wwStore.get(LS_KEY) || 'null');
       if (raw && Array.isArray(raw.entries)) {
         // 旧导航迁移：品类里的材质名 → 材质条目
         raw.entries.forEach(en => {
@@ -3562,7 +3648,7 @@
   let itemSearch = '';
 
   function saveNav() {
-    localStorage.setItem(LS_KEY, JSON.stringify(Object.assign({}, navState, { filter: filterState })));
+    wwStore.set(LS_KEY, JSON.stringify(Object.assign({}, navState, { filter: filterState })));
   }
   function resetFilter() {
     filterState = { cats: [], mats: [], shapes: [], walnuts: [], grades: [], brands: [], status: 'all' };
@@ -3720,7 +3806,7 @@
   let detailFrom = 'items';
   let favoriteId = null;
   let detailMetaExpanded = false;         // 基础信息卡是否展开扩展字段
-  let detailRecordView = localStorage.getItem('ww_recordView') === 'grid' ? 'grid' : 'timeline'; // 盘玩记录视图偏好
+  let detailRecordView = wwStore.get('ww_recordView') === 'grid' ? 'grid' : 'timeline'; // 盘玩记录视图偏好
   let detailRecordGroups = [];            // 当前藏品按年月分组的记录
   let monthShownYear = 0;                 // 年月定位弹层当前显示的年
   let monthShownMonth = 0;
@@ -3732,7 +3818,7 @@
     detailFrom = (cur && cur.dataset.tab) || 'items';
     detailId = id;
     detailMetaExpanded = false;
-    detailRecordView = localStorage.getItem('ww_recordView') === 'grid' ? 'grid' : 'timeline';
+    detailRecordView = wwStore.get('ww_recordView') === 'grid' ? 'grid' : 'timeline';
     updateViewBtn();
     renderDetail();
     $('backTopBtn').classList.remove('show');
@@ -3989,7 +4075,7 @@
   // 视图切换
   function toggleRecordView() {
     detailRecordView = detailRecordView === 'grid' ? 'timeline' : 'grid';
-    localStorage.setItem('ww_recordView', detailRecordView);
+    wwStore.set('ww_recordView', detailRecordView);
     updateViewBtn();
     renderDetail();
   }
@@ -4709,19 +4795,19 @@
   const HIDDEN_KEY = 'itemsNavHidden';
   const sideLayoutEl = document.querySelector('.side-layout');
   const navExpandBtnEl = $('navExpandBtn');
-  let navHidden = localStorage.getItem(HIDDEN_KEY) === '1';
+  let navHidden = wwStore.get(HIDDEN_KEY) === '1';
   function applyNavHidden() {
     sideLayoutEl.classList.toggle('nav-hidden', navHidden);
     navExpandBtnEl.classList.toggle('hidden', !navHidden);
   }
   $('navCollapseBtn').addEventListener('click', () => {
     navHidden = true;
-    localStorage.setItem(HIDDEN_KEY, '1');
+    wwStore.set(HIDDEN_KEY, '1');
     applyNavHidden();
   });
   navExpandBtnEl.addEventListener('click', () => {
     navHidden = false;
-    localStorage.setItem(HIDDEN_KEY, '0');
+    wwStore.set(HIDDEN_KEY, '0');
     applyNavHidden();
   });
 
@@ -5772,7 +5858,7 @@
   // 可编辑名称（演示：点击标题编辑，保存到本机存储）
   const appName = document.getElementById('appName');
   const nameInput = document.getElementById('nameInput');
-  const savedName = localStorage.getItem('appName');
+  const savedName = wwStore.get('appName');
   if (savedName) appName.textContent = savedName;
   appName.addEventListener('click', () => {
     nameInput.value = appName.textContent;
@@ -5786,14 +5872,14 @@
     appName.textContent = v;
     appName.style.display = '';
     nameInput.style.display = 'none';
-    localStorage.setItem('appName', v);
+    wwStore.set('appName', v);
   };
   nameInput.addEventListener('blur', commitName);
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') commitName(); });
 
   // 可编辑头像（演示：点击头像选择本地图片）
   const avatarImg = document.getElementById('avatarImg');
-  const savedAvatar = localStorage.getItem('avatar');
+  const savedAvatar = wwStore.get('avatar');
   if (savedAvatar) avatarImg.src = savedAvatar;
   avatarImg.addEventListener('click', () => {
     const input = document.createElement('input');
@@ -5805,7 +5891,7 @@
       const reader = new FileReader();
       reader.onload = ev => {
         avatarImg.src = ev.target.result;
-        localStorage.setItem('avatar', ev.target.result);
+        wwStore.set('avatar', ev.target.result);
       };
       reader.readAsDataURL(file);
     };
@@ -5933,11 +6019,11 @@
 
   // ============ 数据备份：导出 / 导入 ============
   const BACKUP_APP = 'ww-ledger-book';
-  const BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwCats', 'wwPrefs', 'itemsNavV2', 'itemsNavHidden', 'appName', 'avatar', 'ww_recordView'];
+  const BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwCats', 'wwPrefs', 'itemsNavV2', 'itemsNavHidden', 'appName', 'avatar', 'ww_recordView', 'wwTombstones'];
   function exportBackup() {
     try {
       const data = {};
-      BACKUP_KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) data[k] = v; });
+      BACKUP_KEYS.forEach(k => { const v = wwStore.get(k); if (v !== null) data[k] = v; });
       const payload = { app: BACKUP_APP, version: 1, exportedAt: new Date().toISOString(), data: data };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -5973,9 +6059,9 @@
         confirmText: '导入',
         onConfirm: () => {
           try {
-            Object.keys(payload.data).forEach(k => localStorage.setItem(k, payload.data[k]));
+            Object.keys(payload.data).forEach(k => wwStore.set(k, payload.data[k]));
             // 导入恢复后跳过默认示例合并，确保只显示备份中的藏品
-            if ('wwItems' in payload.data) localStorage.setItem('ww_noSeed', '1');
+            if ('wwItems' in payload.data) wwStore.set('ww_noSeed', '1');
             toast('导入成功，正在刷新…');
             setTimeout(() => location.reload(), 600);
           } catch (e) {
