@@ -413,6 +413,7 @@
   .switch.on { background: var(--primary-deep); }
   .switch.on::after { left: 21px; }
   .chevron { color: var(--text-sub); font-size: 16px; font-weight: 400; }
+  .ver-text { font-size: 14px; color: var(--text-sub); }
 
   /* ======== 局域网同步（三端共用） ======== */
   .sync-status-row {
@@ -2428,6 +2429,22 @@
         </div>
 
         <div class="card">
+          <div class="card-title"><span class="bar"></span>版本与更新</div>
+          <div class="group">
+            <div class="toggle-row" id="checkUpdateRow" style="cursor:pointer;">
+              <div class="toggle-label">检查更新
+                <small>联网后检查服务器是否有新版本，发现新版会自动应用</small>
+              </div>
+              <div class="chevron">›</div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-label">当前版本</div>
+              <div class="ver-text" id="appVersionText"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-title"><span class="bar"></span>局域网同步</div>
           <div class="group">
             <div class="toggle-row">
@@ -2963,15 +2980,42 @@
 </div>
 
 <script>
-  // Service Worker 注册 + 持久化存储请求
+  // Service Worker 注册 + 持久化存储请求 + 版本更新监听
+  // 更新流程：部署新文件 → 打开 PWA（或点设置页「检查更新」）→ 浏览器发现新 sw.js 字节变化
+  // → 安装新 SW（skipWaiting 立即激活）→ controllerchange → 本页自动刷新加载最新版
   if ('serviceWorker' in navigator) {
     (async () => {
+      // 记录注册前页面是否已被 SW 控制：首次安装时不自动刷新，避免刚打开就多刷一次
+      const hadController = !!navigator.serviceWorker.controller;
+      let reg = null;
       try {
-        const reg = await navigator.serviceWorker.register('./sw.js');
+        reg = await navigator.serviceWorker.register('./sw.js');
         console.log('SW registered:', reg.scope);
+        // 主动检查一次更新，绕过浏览器默认最长 24h 的检查间隔
+        if (reg.update) reg.update().catch(() => {});
       } catch (err) {
         console.log('SW registration skipped:', err.message);
       }
+      // 发现新版本 SW 已被安装 → 提示，等待它接管页面
+      if (reg) {
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('New SW installed, waiting to take control...');
+              if (typeof toast === 'function') toast('发现新版本，正在更新…');
+            }
+          });
+        });
+      }
+      // 新 SW 接管页面 → 自动刷新一次，让用户立即看到最新版（防重入，避免无限刷新）
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || refreshing) return;
+        refreshing = true;
+        setTimeout(() => location.reload(), 300);
+      });
       try {
         if (navigator.storage && navigator.storage.persist) {
           const persisted = await navigator.storage.persist();
@@ -6254,6 +6298,24 @@
   $('exportBackupRow').addEventListener('click', exportBackup);
   $('importBackupRow').addEventListener('click', () => $('importBackupInput').click());
   $('importBackupInput').addEventListener('change', importBackupFile);
+
+  // ============ 版本与更新 ============
+  // 每次发新版时同步更新这里：如 v3.1.0
+  const APP_VERSION = 'v3.0.0';
+  const appVerEl = $('appVersionText');
+  if (appVerEl) appVerEl.textContent = APP_VERSION;
+  $('checkUpdateRow').addEventListener('click', async () => {
+    if (!('serviceWorker' in navigator)) { toast('当前环境不支持更新检查'); return; }
+    toast('正在检查更新…');
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) { toast('未找到应用服务，无法检查更新'); return; }
+      await reg.update();
+      toast('已是最新版本');
+    } catch (e) {
+      toast('检查更新失败：' + e.message);
+    }
+  });
 
   // ============ 局域网一键同步（客户端引擎，三端共用） ============
   // 数据契约：完整数据集 { wwItems, wwLedger, wwCats, wwTombstones }

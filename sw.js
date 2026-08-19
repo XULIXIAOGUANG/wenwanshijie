@@ -1,4 +1,4 @@
-const CACHE = 'wwapp-v2';
+const CACHE = 'wwapp-v3';
 const SHELL = [
   './index.html',
   './manifest.json',
@@ -30,16 +30,39 @@ self.addEventListener('activate', e => {
   );
 });
 
+// 导航请求：网络优先 —— 联网时强制拿服务器最新文件，失败/离线才回退缓存（保证更新能生效且离线可用）
+function networkFirst(req) {
+  return fetch(req, { cache: 'no-store' })
+    .then(res => {
+      if (!res || !res.ok) throw new Error('network error');
+      const cp = res.clone();
+      caches.open(CACHE).then(c => c.put(req, cp)).catch(() => {});
+      return res;
+    })
+    .catch(() => caches.match(req).then(r => r || caches.match('./index.html')));
+}
+
+// 静态资源：缓存优先 + 后台静默更新（秒开体验，同时让新资源最终生效）
+function staleWhileRevalidate(req) {
+  return caches.match(req).then(cached => {
+    const net = fetch(req)
+      .then(res => {
+        if (res && res.ok) {
+          const cp = res.clone();
+          caches.open(CACHE).then(c => c.put(req, cp)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() => cached);
+    return cached || net;
+  });
+}
+
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(r => {
-      if (r) return r;
-      return fetch(e.request).then(res => {
-        const cp = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, cp));
-        return res;
-      }).catch(() => caches.match('./index.html'));
-    })
-  );
+  if (e.request.mode === 'navigate') {
+    e.respondWith(networkFirst(e.request));
+    return;
+  }
+  e.respondWith(staleWhileRevalidate(e.request));
 });
