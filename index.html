@@ -3051,7 +3051,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.0.0';
+  const APP_VERSION = 'v3.1.0';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -3171,6 +3171,19 @@
     stats: document.getElementById('page-stats'),
     settings: document.getElementById('page-settings')
   };
+  // 分帧渲染调度：先切 active 立即反馈，重渲染延到下一帧，避免点击回调内阻塞主线程
+  let _renderRaf = 0;
+  function scheduleCurrentRender() {
+    if (_renderRaf) return; // 已调度，合并为一次渲染
+    _renderRaf = requestAnimationFrame(() => {
+      _renderRaf = 0;
+      const k = currentTab;
+      if (k === 'home') renderHome();
+      else if (k === 'stats') renderStats();
+      else if (k === 'items') renderItems();
+      else if (k === 'ledger') renderLedger();
+    });
+  }
   function switchTab(key, keepSheets) {
     if (!keepSheets) {
       // 统一关闭所有弹层，避免跨页残留遮挡
@@ -3195,10 +3208,7 @@
       pagesMap[k].classList.toggle('active', k === key);
     });
     currentTab = key;
-    if (key === 'home') renderHome();
-    if (key === 'stats') renderStats();
-    if (key === 'items') renderItems();
-    if (key === 'ledger') renderLedger();
+    scheduleCurrentRender();
     document.querySelector('.screen').scrollTop = 0;
   }
   // ======== 首页 / 统计页 数据联动 ========
@@ -3536,10 +3546,7 @@
   // 数据变更后统一刷新当前页（避免全量重绘所有 tab）
   let currentTab = 'home';
   function refreshAll() {
-    if (currentTab === 'items') renderItems();
-    else if (currentTab === 'ledger') renderLedger();
-    else if (currentTab === 'stats') renderStats();
-    else renderHome();
+    scheduleCurrentRender();
   }
   function markDirty(x) { if (x) x._dirty = true; }
   tabItems.forEach(tab => {
@@ -3770,6 +3777,7 @@
     _itemsSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('item', old.id, old.name); });
     _itemsSnap = ITEMS.slice();
     wwStore.set('wwItems', JSON.stringify(ITEMS));
+    _itemsVersion++;
     refreshAll();
   }
   // ============ 账本流水数据 ============
@@ -4103,13 +4111,16 @@
     if (filterState.grades.length) list = list.filter(it => filterState.grades.indexOf(it.grade) >= 0);
     if (filterState.brands.length) list = list.filter(it => filterState.brands.indexOf(brandName(it.brand)) >= 0);
     if (filterState.status !== 'all') list = list.filter(it => it.status === filterState.status);
-    list.sort((a, b) => (a.status === 'sold' ? 1 : 0) - (b.status === 'sold' ? 1 : 0) || ((b.fav || b.pinned ? 1 : 0) - (a.fav || a.pinned ? 1 : 0)) || (heldDays(b) - heldDays(a)));
+    // 排序记忆化：预计算 heldDays，避免比较器内重复调用（new Date / Date.now 开销大）
+    for (let i = 0; i < list.length; i++) list[i]._hd = heldDays(list[i]);
+    list.sort((a, b) => (a.status === 'sold' ? 1 : 0) - (b.status === 'sold' ? 1 : 0) || ((b.fav || b.pinned ? 1 : 0) - (a.fav || a.pinned ? 1 : 0)) || (b._hd - a._hd));
+    for (let i = 0; i < list.length; i++) delete list[i]._hd;
     return list;
   }
 
   function itemCardHtml(it) {
     const imgPart = firstImage(it)
-      ? '<img class="item-card-img" src="' + firstImage(it) + '" alt="" loading="lazy">'
+      ? '<img class="item-card-img" src="' + firstImage(it) + '" alt="" loading="lazy" decoding="async" width="52" height="52">'
       : '<div class="item-card-img" style="color: var(--primary-deep);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' + iconPaths[it.icon] + '</svg></div>';
     const pricePart = prefs.showCardPrice
       ? (it.status === 'sold'
@@ -4131,7 +4142,15 @@
       '<div class="item-card-meta">' + meta + '</div></div>' + badge + '</div>';
   }
 
-  function renderItems() {
+  // 藏品列表渲染缓存：数据或视图未变时复用 DOM，避免切页/切分类时反复 innerHTML 重建
+  let _itemsVersion = 0;             // 数据内容级变更计数（saveItems / 同步回写时自增）
+  let _itemsRenderSig = '';          // 上次渲染的签名
+  function renderItems(force) {
+    const sig = _itemsVersion + '|' + selectedKey + '|' + itemSearch + '|' +
+      (prefs.showCardPrice ? '1' : '0') + (prefs.showCatInName ? '1' : '0') + '|' +
+      JSON.stringify([filterState.cats, filterState.mats, filterState.shapes, filterState.walnuts, filterState.grades, filterState.brands, filterState.status]);
+    if (!force && _itemsRenderSig === sig) return;  // 数据与视图未变 → 复用已有 DOM，直接返回
+    _itemsRenderSig = sig;
     const list = getFilteredItems();
     const sel = navState.entries.find(en => entryKey(en) === selectedKey);
     sectionTitleEl.textContent = (sel && sel.type !== 'all') ? sel.value : '全部藏品';
@@ -6649,7 +6668,38 @@
           .catch(err => { if (err && err.status) throw err; throw new Error('HTTP ' + res.status); });
       }
       return res.json();
-    }).catch(err => { if (timer) clearTimeout(timer); throw err; });
+    }).catch(err => {
+      if (timer) clearTimeout(timer);
+      throw translateSyncError(err, base + path);
+    });
+  }
+
+  // 把同步相关的原生浏览器错误翻译成清晰中文指引
+  function translateSyncError(err, url) {
+    if (err && err._friendly) return err;
+    const msg = (err && err.message) || '';
+    const aborted = err && err.name === 'AbortError';
+    const isHttpsPage = location.protocol === 'https:';
+    const targetHttp = /^http:\/\//.test(url || '');
+    // HTTPS 页面（如 GitHub Pages）+ HTTP 局域网目标：浏览器硬性禁止（混合内容），代码无法绕过
+    if (isHttpsPage && targetHttp) {
+      const e = new Error('当前页面是 HTTPS（GitHub Pages），浏览器禁止连接 http:// 局域网主机，同步无法成功。');
+      e._friendly = true;
+      e._httpsHttp = true;
+      return e;
+    }
+    if (aborted || /timed out|network timeout|timeout/i.test(msg)) {
+      const e = new Error('连接超时。请确认电脑同步主机已开启、手机和电脑在同一 WiFi，并核对同步地址。');
+      e._friendly = true;
+      return e;
+    }
+    if (/load failed|failed to fetch|networkerror|network error|connection refused|connect/i.test(msg)) {
+      const e = new Error('无法连接电脑端。请确认电脑已运行「一键同步主机」、手机和电脑在同一 WiFi，且同步地址为「电脑IP:8899」（如 192.168.1.5:8899）。');
+      e._friendly = true;
+      return e;
+    }
+    if (err && err.status) return err; // 服务器明确返回的状态码错误，保留原文
+    return err;
   }
 
   function getDeviceName() {
@@ -6693,6 +6743,7 @@
       ITEMS = data.wwItems;
       _itemsSnap = ITEMS.slice();
       wwStore.set('wwItems', JSON.stringify(ITEMS));
+      _itemsVersion++;
     }
     if (Array.isArray(data.wwLedger)) {
       ledger = data.wwLedger;
@@ -6724,6 +6775,12 @@
   function doSync(host, pin) {
     const base = syncBaseUrl(host);
     if (!base) return Promise.reject(new Error('请先填写电脑端同步地址'));
+    // 当前页面为 HTTPS（如 GitHub Pages）+ 目标是 http 局域网主机 → 浏览器硬性禁止，直接明确提示
+    if (location.protocol === 'https:' && /^http:\/\//.test(base)) {
+      const e = new Error('当前页面是 HTTPS（GitHub Pages），浏览器禁止连接 http:// 局域网主机，同步无法成功。');
+      e._httpsHttp = true;
+      return Promise.reject(e);
+    }
     return syncFetch(base, '/api/info', { method: 'GET' }, 6000)
       .then(info => {
         if (!info || !info.ok) throw new Error('无法连接同步主机，请检查地址与网络');
@@ -6803,8 +6860,15 @@
       }
     } catch (e) { /* ignore */ }
   } else if (_localAddrs.length) {
+    // 浏览器端：若页面正从局域网 http（合一服务）打开，则同步地址应填当前打开地址（同源），否则提示合一服务端口 8899
+    let curHost = '';
+    try {
+      const u = new URL(location.href);
+      if (u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') curHost = u.hostname + (u.port ? ':' + u.port : '');
+    } catch (e) { /* ignore */ }
+    const hint = curHost ? curHost : _localAddrs[0] + ':8899';
     syncHostLocal.style.display = 'block';
-    syncHostLocal.textContent = '本机同步地址：http://' + _localAddrs[0] + ':' + SYNC_PORT + '（手机填这个）';
+    syncHostLocal.textContent = '同步地址：' + hint + '（手机填这个；若用桌面应用同步则填 ' + _localAddrs[0] + ':' + SYNC_PORT + '）';
   }
 
   // 自动发现主机（扫描本机网段）
@@ -6845,7 +6909,17 @@
       })
       .catch(err => {
         syncStatus('同步失败', false);
-        syncLogLine('err', '同步失败：' + (err.message || '网络异常') + '<br>请确认电脑端应用已打开、已开启同步主机，且两台设备在同一 WiFi');
+        if (err && err._httpsHttp) {
+          syncLogLine('err',
+            '<b>当前页面是 HTTPS（GitHub Pages）</b>，浏览器出于安全策略禁止连接 http:// 局域网主机，所以同步无法成功。<br>' +
+            '解决办法：改用<b>局域网地址</b>打开本应用再同步——' +
+            '① 在电脑上双击运行「一键同步主机-局域网.cmd」；' +
+            '② 用 iPhone 浏览器访问 <b>http://电脑IP:8899</b>；' +
+            '③ 同步地址填 <b>电脑IP:8899</b> 后点「一键同步」。'
+          );
+        } else {
+          syncLogLine('err', '同步失败：' + (err.message || '网络异常') + '<br>请确认电脑已运行「一键同步主机-局域网.cmd」、手机和电脑在同一 WiFi，且同步地址填「电脑IP:8899」（如 192.168.1.5:8899）。');
+        }
       })
       .finally(() => syncSetBusy(false));
   });
