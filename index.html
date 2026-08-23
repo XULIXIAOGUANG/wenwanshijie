@@ -1507,7 +1507,7 @@
   }
   .detail-img-wrap {
     position: relative;
-    width: 100%; height: 210px; border-radius: 16px; overflow: hidden;
+    width: 100%; height: 380px; border-radius: 16px; overflow: hidden;
     background: var(--primary-bg); margin-bottom: 18px;
   }
   .detail-swiper { width: 100%; height: 100%; position: relative; }
@@ -3105,6 +3105,18 @@
   let refreshing = false; // 防重入：避免 controllerchange 后重复刷新
   if ('serviceWorker' in navigator) {
     (async () => {
+      // 桌面 Electron（file:// 加载）下 SW 无法 fetch，会拦截页面导致整页白屏（ERR_FAILED）。
+      // 这里注销所有已注册的 SW 并跳过注册，避免已接管的旧 SW 破坏桌面端；浏览器/PWA(http) 不受影响。
+      if (window.electronAPI) {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+          console.log('Desktop: unregistered service worker(s)');
+        } catch (err) {
+          console.log('Desktop: unregister SW skipped:', err.message);
+        }
+        return;
+      }
       // 记录注册前页面是否已被 SW 控制：首次安装时不自动刷新，避免刚打开就多刷一次
       const hadController = !!navigator.serviceWorker.controller;
       let reg = null;
@@ -3573,8 +3585,73 @@
     { id: 11, name: '四座楼核桃', cat: '核桃', mat: '四座楼', shape: '', grade: '双金', brand: '', days: 180, pinned: false, status: 'sold', price: 900, sellPrice: 1300, size: '边43/肚37', nickName: '', channel: '', shipFee: 0, img: IMG_HT, buyDate: '2026-02-10', soldDate: '2026-07-15' },
     { id: 12, name: '蜜蜡手串', cat: '手串', mat: '蜜蜡', shape: '老型', grade: '金标', brand: '京工坊', days: 260, pinned: false, status: 'sold', price: 800, sellPrice: 1200, size: '10×12mm', nickName: '秋色', channel: '微拍堂', shipFee: 15, icon: 'gem', buyDate: '2025-11-14', soldDate: '2026-08-01' }
   ];
+  // ==================== IndexedDB 影子备份（仅浏览器/PWA 分支启用） ====================
+  // 解决 iOS Safari/PWA 下 localStorage 写入延迟刷盘、进程被杀后数据丢失的问题：
+  // 每次写入同步落到 localStorage 之外，再以 readwrite 事务写一份到 IndexedDB（事务提交即持久化，可靠性更高）。
+  // 启动时（restoreFromIDB）若发现 localStorage 键缺失，从 IndexedDB 补齐。IDB 不可用/隐私模式时静默降级为纯 localStorage，不影响任何现有功能。
+  let _idbPromise = null;
+  function idbOpen() {
+    if (_idbPromise) return _idbPromise;
+    _idbPromise = new Promise(function (resolve) {
+      try {
+        if (typeof indexedDB === 'undefined') { resolve(null); return; }
+        var req = indexedDB.open('ww-notebook-store', 1);
+        req.onupgradeneeded = function () {
+          var db = req.result;
+          if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { resolve(null); };
+        req.onblocked = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+    return _idbPromise;
+  }
+  function idbPut(key, value) {
+    idbOpen().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(String(value), key);
+        tx.onerror = function () { /* ignore */ };
+        tx.onabort = function () { /* ignore */ };
+      } catch (e) { /* ignore */ }
+    });
+  }
+  function idbDel(key) {
+    idbOpen().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').delete(key);
+        tx.onerror = function () { /* ignore */ };
+        tx.onabort = function () { /* ignore */ };
+      } catch (e) { /* ignore */ }
+    });
+  }
+  function idbGetAll() {
+    return idbOpen().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          var out = {};
+          var tx = db.transaction('kv', 'readonly');
+          var store = tx.objectStore('kv');
+          var req = store.openCursor();
+          req.onsuccess = function () {
+            var cur = req.result;
+            if (cur) { out[cur.key] = cur.value; cur.continue(); }
+            else resolve(out);
+          };
+          req.onerror = function () { resolve(null); };
+          tx.onabort = function () { resolve(null); };
+          tx.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    });
+  }
   // ==================== 存储适配层（三端共用） ====================
-  // 浏览器/安卓 PWA → localStorage；Electron 桌面 → window.electronAPI（主进程读写 data.json，同步 IPC 桥接）
+  // 浏览器/安卓 PWA → localStorage + IndexedDB 影子备份；Electron 桌面 → window.electronAPI（主进程读写 data.json，同步 IPC 桥接）
   // 此后所有持久化读写一律走 wwStore，保证三端行为一致
   const wwStore = {
     isElectron: typeof window !== 'undefined' && !!window.electronAPI && typeof window.electronAPI.getData === 'function',
@@ -3589,12 +3666,14 @@
         if (wwStore.isElectron) { window.electronAPI.setData(key, String(value)); return; }
         localStorage.setItem(key, value);
       } catch (e) { /* ignore */ }
+      idbPut(key, value);
     },
     remove: function (key) {
       try {
         if (wwStore.isElectron) { window.electronAPI.removeData(key); return; }
         localStorage.removeItem(key);
       } catch (e) { /* ignore */ }
+      idbDel(key);
     }
   };
 
@@ -4440,8 +4519,34 @@
   }
   // ============ 图片压缩工具：>1MB 自动压缩后存储，≤1MB 直传原图，>10MB 拒绝 ============
   // 手机照片普遍 2-5MB，直接 base64 存 localStorage 会撑爆空间，这里统一压缩到 JPEG 0.8
-  async function compressImageFile(file) {
-    // 1) 解码：优先 createImageBitmap（性能好、不触发缓存），iOS 老版本回退 <img> + object URL
+  // 判断是否为 HEIC/HEIF（iPhone 默认照片格式，Windows Electron 无法直接解码）
+  function isHeic(file) {
+    const t = (file && file.type || '').toLowerCase();
+    const n = (file && file.name || '').toLowerCase();
+    return t.indexOf('heic') >= 0 || t.indexOf('heif') >= 0 || /\.heic$/i.test(n) || /\.heif$/i.test(n);
+  }
+  // 判断是否为 SVG（矢量图，转 JPG 时可能因外部引用污染画布而失败，需兜底）
+  function isSvg(file) {
+    const t = (file && file.type || '').toLowerCase();
+    const n = (file && file.name || '').toLowerCase();
+    return t.indexOf('svg') >= 0 || /\.svg$/i.test(n);
+  }
+  // 解码图片为可绘制源（ImageBitmap / HTMLImageElement / 已解码的 canvas）
+  // 桌面 Electron 下 HEIC 交由主进程 heic-decode 解码为 RGBA；其余走浏览器原生解码
+  async function decodeImageFile(file) {
+    // HEIC 且处于 Electron 桌面端：主进程解码
+    if (isHeic(file) && window.electronAPI && typeof window.electronAPI.heicDecode === 'function') {
+      const buf = await file.arrayBuffer();
+      const res = await window.electronAPI.heicDecode(buf);
+      if (!res || !res.ok) throw new Error((res && res.message) || 'HEIC 解码失败');
+      const imgData = new ImageData(new Uint8ClampedArray(res.data), res.width, res.height);
+      const c = document.createElement('canvas');
+      c.width = res.width;
+      c.height = res.height;
+      c.getContext('2d').putImageData(imgData, 0, 0);
+      return c;
+    }
+    // 优先 createImageBitmap（性能好、不触发缓存），iOS 老版本回退 <img> + object URL
     let bmp = null;
     try {
       if (window.createImageBitmap) bmp = await createImageBitmap(file);
@@ -4455,9 +4560,15 @@
         img.src = url;
       });
     }
-    // 2) 等比缩放：最长边限制 1280px
+    return bmp;
+  }
+  async function compressImageFile(file) {
+    // 1) 解码
+    const bmp = await decodeImageFile(file);
+    // 2) 等比缩放：最长边限制 1280px（同时天然控制超大尺寸图的内存占用）
     const MAX_SIDE = 1280;
     let { width, height } = bmp;
+    if (!width || !height) throw new Error('无法读取图片尺寸');
     if (width > MAX_SIDE || height > MAX_SIDE) {
       const scale = Math.min(MAX_SIDE / width, MAX_SIDE / height);
       width = Math.round(width * scale);
@@ -4472,23 +4583,27 @@
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(bmp, 0, 0, width, height);
     // 4) 输出 JPEG dataURL（文玩照片无透明需求）
-    return canvas.toDataURL('image/jpeg', 0.8);
+    try {
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch (e) {
+      // 画布污染（多为 SVG 含外部引用）→ 抛错，由上层回退直读原图
+      throw new Error('该图片无法转换为 JPG（可能为 SVG 或受保护格式），将按原图保存');
+    }
   }
-  // 统一上传分支：≤1MB 直传；1MB~10MB 压缩；>10MB 拒绝
+  // 统一上传分支：≤1MB 的普通位图直传（保留小图质量）；HEIC/SVG/大图一律压缩；不再拒绝任何大小的图片
   function readOrCompress(f, onOk) {
     const rd = new FileReader();
     rd.onload = () => onOk(rd.result);
-    if (f.size <= 1024 * 1024) {
+    const needCompress = f.size > 1024 * 1024 || isHeic(f) || isSvg(f);
+    if (!needCompress) {
       rd.readAsDataURL(f);
-    } else if (f.size > 10 * 1024 * 1024) {
-      toast('图片过大，无法上传');
-    } else {
-      toast('正在压缩图片…');
-      compressImageFile(f).then(url => {
-        onOk(url);
-        toast('图片已自动压缩');
-      }).catch(() => rd.readAsDataURL(f)); // 压缩失败回退直读原图，不丢照片
+      return;
     }
+    toast('正在处理图片…');
+    compressImageFile(f).then(url => {
+      onOk(url);
+      toast('图片已自动压缩');
+    }).catch(() => rd.readAsDataURL(f)); // 压缩失败回退直读原图，不丢照片
   }
   function previewDetailSecImg(src) { openDetailLightbox(src); }
   function closeDetail() {
@@ -4820,6 +4935,13 @@
     const c = $('detailCount');
     c.textContent = (detailImgIdx + 1) + '/' + imgs.length;
   }
+  // 鼠标滚轮切换图片：向上滚上一张、向下滚下一张（仅鼠标悬停在轮播图区域内生效，不影响页面滚动）
+  detailSwiperEl.addEventListener('wheel', e => {
+    if (!detailImgs.length) return;
+    e.preventDefault();
+    showDetailSlide(detailImgIdx + (e.deltaY > 0 ? 1 : -1));
+    startDetailAutoPlay();
+  }, { passive: false });
   // 点击轮播缩略图 → 打开全屏预览，并同步当前 index
   detailSwiperEl.addEventListener('click', e => {
     const img = e.target.closest('img[data-i]');
@@ -6935,6 +7057,31 @@
     }
     // 筛选面板选项来自 POOLS，下次打开自动同步
   }
+
+  // ==================== 启动恢复：从 IndexedDB 影子备份补齐丢失的 localStorage 键 ====================
+  // iOS Safari/PWA 下 localStorage 写入可能因进程被杀未落盘，导致下次打开数据丢失、回退演示数据。
+  // 此函数在页面加载末尾异步执行：若发现 localStorage 中某键缺失（被系统清空/丢失）而 IndexedDB 有备份，
+  // 则写回该键并触发一次 reload，让页面以正常同步流程（loadItems/loadLedger）读取真实数据。
+  // 恢复后 localStorage 已就位，再次执行时不再触发 reload（防死循环）。
+  function restoreFromIDB() {
+    if (wwStore.isElectron) return; // 桌面端走 IPC，无需恢复
+    if (typeof indexedDB === 'undefined') return; // IDB 不可用则保持现状（纯 localStorage）
+    idbGetAll().then(function (backup) {
+      if (!backup) return; // 无备份/打开失败，静默降级
+      var changed = false;
+      try {
+        for (var k in backup) {
+          if (!Object.prototype.hasOwnProperty.call(backup, k)) continue;
+          if (localStorage.getItem(k) === null) {
+            localStorage.setItem(k, String(backup[k]));
+            changed = true;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      if (changed) location.reload();
+    });
+  }
+  restoreFromIDB();
 
 </script>
 </body>
