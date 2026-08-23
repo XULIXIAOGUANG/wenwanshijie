@@ -60,6 +60,9 @@ function staleWhileRevalidate(req) {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // file://（桌面 Electron 用 loadFile 加载）与 app:// 协议下 SW 无法 fetch，直接放行交给浏览器默认处理，
+  // 否则 respondWith(fetch(file://请求)) 会收到非 Response 对象，导致整页导航 ERR_FAILED 白屏。
+  if (e.request.url.indexOf('file:') === 0 || e.request.url.indexOf('app:') === 0) return;
   if (e.request.mode === 'navigate') {
     e.respondWith(networkFirst(e.request));
     return;
