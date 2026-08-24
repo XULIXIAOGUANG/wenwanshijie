@@ -606,6 +606,7 @@
   .add-btn {
     width: 32px; height: 32px;
     border-radius: 50%;
+    border: none; /* 去除 button 默认黑色外圈，与藏品页 div 版一致 */
     background: var(--primary-bg);
     color: var(--primary-deep);
     font-size: 21px;
@@ -886,6 +887,8 @@
     margin-bottom: 14px;
   }
   .sheet-close { color: var(--text-sub); font-size: 18px; cursor: pointer; padding: 0 4px; }
+  .win-sheet-title-right { display: flex; align-items: center; gap: 12px; }
+  .win-del-sheet { color: var(--danger, #C0392B); font-size: 13px; font-weight: 500; cursor: pointer; }
   .sheet-label {
     font-size: 12px; font-weight: 600;
     color: var(--text-sub);
@@ -1903,6 +1906,146 @@
   }
   .icon-btn:active { transform: scale(0.88); }
   .sheet-btn.primary { box-shadow: 0 4px 10px rgba(92,143,110,0.26); }
+
+  /* ======== 中奖记录页 ======== */
+  .win-stats-row {
+    display: flex;
+    gap: 10px;
+    margin: 12px 14px 4px;
+  }
+  .win-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    border-radius: 14px;
+    background: var(--primary-bg);
+    font-size: 12px;
+    color: var(--text-sub);
+  }
+  .win-stat b {
+    display: block;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--primary-deep);
+    line-height: 1.2;
+    margin-bottom: 2px;
+  }
+  .win-list {
+    padding: 8px 14px 110px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .win-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: transform 0.16s ease, opacity 0.2s;
+  }
+  .win-card:active { transform: scale(0.99); }
+  .win-card.claimed {
+    opacity: 0.55;
+    filter: grayscale(1);
+  }
+  .win-card .win-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .win-type-tag {
+    flex: none;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--primary-deep);
+  }
+  .win-type-tag.tag-material { background: #E8A33D; }
+  .win-type-tag.tag-other { background: #8A8A8A; }
+  .win-name {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .win-status {
+    flex: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: #C0392B;
+    background: rgba(192,57,43,0.08);
+    padding: 2px 9px;
+    border-radius: 20px;
+  }
+  .win-card.claimed .win-status {
+    color: #27AE60;
+    background: rgba(39,174,96,0.1);
+  }
+  .win-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+    margin-bottom: 10px;
+  }
+  .win-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .win-meta .meta-label { color: #A0A0A0; }
+  .win-addr { grid-column: 1 / -1; }
+  .win-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .win-fee {
+    font-size: 13px;
+    color: var(--text-main);
+  }
+  .win-fee b { color: #C0392B; font-weight: 600; }
+  .win-claim-btn {
+    flex: none;
+    margin-left: auto; /* 去领取右对齐，与"领取于"槽位一致 */
+    padding: 7px 16px;
+    border: none;
+    border-radius: 10px;
+    background: var(--primary-deep);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.2s;
+  }
+  .win-claim-btn:active { transform: scale(0.94); }
+  .win-claimed-at {
+    flex: none;
+    margin-left: auto; /* 领取时间右对齐，与"去领取"按钮槽位一致 */
+    font-size: 12px;
+    color: var(--text-sub);
+    align-self: center;
+  }
+  .win-empty {
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 13px;
+    padding: 60px 20px;
+    line-height: 1.8;
+  }
+  .win-empty svg {
+    width: 54px; height: 54px;
+    margin-bottom: 12px;
+    color: #C9D6CD;
+  }
+
   @media (hover: hover) {
     .item-card:hover {
       transform: translateY(-1px);
@@ -1991,7 +2134,7 @@
         <!-- 顶部标题栏 -->
         <div class="topbar">
           <div class="topbar-title">
-            <img class="avatar" id="avatarImg" src="./assets/简洁的圆形用户头像占位图_文玩主题_米白色背景上放一枚精致的_2026-08-12T05-09-24.png" alt="头像" title="点击更换头像">
+            <img class="avatar" id="avatarImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='68' height='68'%3E%3Crect width='68' height='68' rx='34' fill='%235C8F6E'/%3E%3Ctext x='34' y='46' font-family='PingFang%20SC,sans-serif' font-size='34' fill='white' text-anchor='middle' font-weight='600'%3E%E6%96%87%3C/text%3E%3C/svg%3E" alt="头像" title="点击更换头像">
             <div class="name" id="appName">文玩记录本</div>
             <input class="name-input" id="nameInput" type="text" maxlength="12" style="display:none">
           </div>
@@ -2076,67 +2219,6 @@
             <div class="opt-chip" data-filter="ledger">账本收支</div>
           </div>
           <div class="list" id="list">
-            <div class="list-item">
-              <img class="list-img" src="./assets/真实感产品照片_一串紫红色小叶紫檀手串_摆放在米白色亚麻布上_2026-08-12T03-43-26.png" alt="">
-              <div class="list-info">
-                <div class="list-name">小叶紫檀手串</div>
-                <div class="list-meta">
-                  <span class="tag tag-care">保养</span>
-                  <span>上油</span>
-                </div>
-              </div>
-              <div class="list-right">
-                <div class="time">今天 20:30</div>
-              </div>
-            </div>
-            <div class="list-item">
-              <div class="list-img" style="background: var(--primary-bg); display:flex; align-items:center; justify-content:center; color: var(--primary-deep);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18"><path d="M9.5 2.5L11 8l-5.5 1.5L11 11l1.5 5.5L14 11l5.5-1.5L14 8z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>
-              </div>
-              <div class="list-info">
-                <div class="list-name">购入文玩油</div>
-                <div class="list-meta">
-                  <span class="tag tag-play">记账</span>
-                  <span>耗材</span>
-                </div>
-              </div>
-              <div class="list-right">
-                <div class="amount">-¥45</div>
-                <div class="time">昨天 21:05</div>
-              </div>
-            </div>
-            <div class="list-item">
-              <div class="list-img" style="background: var(--primary-bg); display:flex; align-items:center; justify-content:center; color: var(--primary-deep);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              </div>
-              <div class="list-info">
-                <div class="list-name">购入：崖柏根雕摆件</div>
-                <div class="list-meta">
-                  <span class="tag tag-play">记账</span>
-                  <span>藏品花销</span>
-                </div>
-              </div>
-              <div class="list-right">
-                <div class="amount">-¥680</div>
-                <div class="time">08-10</div>
-              </div>
-            </div>
-            <div class="list-item">
-              <div class="list-img" style="background: var(--primary-bg); display:flex; align-items:center; justify-content:center; color: var(--income);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
-              </div>
-              <div class="list-info">
-                <div class="list-name">回血：金刚菩提</div>
-                <div class="list-meta">
-                  <span class="tag tag-play">记账</span>
-                  <span>收入</span>
-                </div>
-              </div>
-              <div class="list-right">
-                <div class="amount income">+¥1,200</div>
-                <div class="time">08-08</div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -2395,6 +2477,23 @@
 
       </div>
 
+      <!-- ======== 中奖记录页 ======== -->
+      <div class="page" id="page-wins">
+        <div class="topbar">
+          <div class="page-title">中奖记录</div>
+          <div class="topbar-actions">
+            <button class="add-btn" id="winsAddBtn" title="新增奖品">+</button>
+          </div>
+        </div>
+
+        <div class="win-stats-row">
+          <div class="win-stat"><b id="winStatPending">0</b>待领取</div>
+          <div class="win-stat"><b id="winStatClaimed">0</b>已领取</div>
+        </div>
+
+        <div class="win-list" id="winList"></div>
+      </div>
+
       <!-- ======== 设置页 ======== -->
       <div class="page" id="page-settings">
         <div class="topbar">
@@ -2521,6 +2620,12 @@
                 <small>手机与电脑连同一 WiFi，把两台设备的数据合并成一份（互为备份）</small>
               </div>
             </div>
+            <div class="toggle-row">
+              <div class="toggle-label">自动同步
+                <small>打开应用时自动同步到电脑（电脑 data.json 作为主备份，防丢失）</small>
+              </div>
+              <div class="switch on" id="autoSyncSwitch"></div>
+            </div>
             <div class="sync-status-row">
               <span class="sync-dot" id="syncDot"></span>
               <span class="sync-status-text" id="syncStatusText">本机数据已就绪，等待同步</span>
@@ -2548,6 +2653,11 @@
             <div class="toggle-row">
               <div class="toggle-label">端口
                 <small id="hostPortText">4789</small>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-label">提示
+                <small>建议在路由器中为电脑设置固定 IP（DHCP 静态绑定），避免 IP 变化导致手机数据空间变更</small>
               </div>
             </div>
             <div class="toggle-row">
@@ -2707,6 +2817,82 @@
       <div class="sheet-actions">
         <div class="sheet-btn ghost" id="itemResetBtn">重置</div>
         <div class="sheet-btn primary" id="itemSaveBtn">保存</div>
+      </div>
+    </div>
+
+    <!-- 中奖奖品弹层 -->
+    <div class="mask" id="winMask"></div>
+    <div class="add-sheet" id="winSheet">
+      <div class="sheet-title">
+        <span id="winSheetTitle">新增奖品</span>
+        <span class="win-sheet-title-right">
+          <span class="win-del-sheet" id="winDelBtn">删除</span>
+          <span class="sheet-close" id="winSheetClose">×</span>
+        </span>
+      </div>
+      <input type="hidden" id="winId">
+
+      <div class="sheet-label">奖品类型</div>
+      <div class="opt-chips" id="winTypeChips"></div>
+
+      <div id="winNameRow">
+        <div class="sheet-label">物品名称</div>
+        <div class="custom-input">
+          <input type="text" id="winNameInput" placeholder="输入物品名称">
+        </div>
+      </div>
+
+      <div id="winDimFields">
+        <div class="sheet-label">品类</div>
+        <div class="opt-chips" id="winCatChips"></div>
+
+        <div class="dim-row" id="winMatRow">
+          <div class="sheet-label" id="winMatLabel">材质</div>
+          <div class="opt-chips" id="winMatChips"></div>
+        </div>
+
+        <div class="dim-row" id="winShapeRow">
+          <div class="sheet-label" id="winShapeLabel">器型</div>
+          <div class="opt-chips" id="winShapeChips"></div>
+        </div>
+
+        <div class="dim-row" id="winGradeRow">
+          <div class="sheet-label">等级</div>
+          <div class="opt-chips" id="winGradeChips"></div>
+        </div>
+      </div>
+
+      <div class="sheet-label">品牌（可选）</div>
+      <div class="custom-input">
+        <input type="text" id="winBrandInput" placeholder="输入品牌">
+      </div>
+
+      <div class="sheet-label">中奖渠道（可选）</div>
+      <div class="opt-chips" id="winChannelChips"></div>
+
+      <div class="sheet-label">快递费（选填）</div>
+      <input type="number" class="form-input full" id="winShipFeeInput" placeholder="快递费 ¥" min="0" step="0.01">
+
+      <div class="sheet-label">中奖日期</div>
+      <input type="date" class="form-input full" id="winDateInput">
+
+      <div class="sheet-label">中奖账号（可选）</div>
+      <div class="custom-input">
+        <input type="text" id="winAccountInput" placeholder="中奖账号">
+      </div>
+
+      <div class="sheet-label">电话（选填）</div>
+      <input type="tel" class="form-input full" id="winPhoneInput" placeholder="联系电话">
+
+      <div class="sheet-label">地址（选填）</div>
+      <textarea class="form-textarea" id="winAddressInput" placeholder="收货地址…" rows="2"></textarea>
+
+      <div class="sheet-label">备注（可选）</div>
+      <textarea class="form-textarea" id="winNoteInput" placeholder="备注…" rows="2"></textarea>
+
+      <div class="sheet-actions">
+        <div class="sheet-btn ghost" id="winResetBtn">重置</div>
+        <div class="sheet-btn primary" id="winSaveBtn">保存</div>
       </div>
     </div>
 
@@ -2883,6 +3069,10 @@
       <div class="tab-item" data-tab="ledger">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         账本
+      </div>
+      <div class="tab-item" data-tab="wins">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 6H4a2 2 0 0 0 2 4h2M17 6h3a2 2 0 0 1-2 4h-2"/></svg>
+        中奖
       </div>
       <div class="tab-item" data-tab="stats">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
@@ -3168,6 +3358,7 @@
     home: document.getElementById('page-home'),
     items: document.getElementById('page-items'),
     ledger: document.getElementById('page-ledger'),
+    wins: document.getElementById('page-wins'),
     stats: document.getElementById('page-stats'),
     settings: document.getElementById('page-settings')
   };
@@ -3182,6 +3373,7 @@
       else if (k === 'stats') renderStats();
       else if (k === 'items') renderItems();
       else if (k === 'ledger') renderLedger();
+      else if (k === 'wins') renderWins();
     });
   }
   function switchTab(key, keepSheets) {
@@ -3198,6 +3390,7 @@
       if (typeof closeLedgerMonthSheet === 'function') closeLedgerMonthSheet();
       if (typeof closeRecordPanel === 'function') closeRecordPanel();
       if (typeof closeCatManager === 'function') closeCatManager();
+      if (typeof closeWinSheet === 'function') closeWinSheet();
       stopDetailAutoPlay();
     }
     $('page-detail').classList.remove('active');
@@ -3556,11 +3749,6 @@
   document.getElementById('homeSettingsBtn').addEventListener('click', () => switchTab('settings'));
 
   // ======== 藏品页：点单式双栏筛选 ========
-  const IMG_XTZ = './assets/真实感产品照片_一串紫红色小叶紫檀手串_摆放在米白色亚麻布上_2026-08-12T03-43-26.png';
-  const IMG_HT = './assets/真实感产品照片_一对文玩核桃_狮子头__表面有自然包浆光泽__2026-08-12T03-43-25.png';
-  // 轮播多图示例（新迁移：详情页多图轮播 + 编辑弹层多图上传）
-  const IMG_HT_2 = './assets/一对白狮子文玩核桃特写_皮质厚实_纹理清晰_红润包浆感_暖黄_2026-08-14T03-37-38.png';
-  const IMG_HT_3 = './assets/人手盘玩文玩核桃的特写_手持两枚核桃在掌心转动_核桃表面红润_2026-08-14T03-37-55.png';
   const iconPaths = {
     bead: '<circle cx="7" cy="12" r="3.2"/><circle cx="12" cy="12" r="3.2"/><circle cx="17" cy="12" r="3.2"/>',
     oval: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
@@ -3569,29 +3757,6 @@
     bell: '<path d="M12 4a8 8 0 0 1 8 8v3l2 2H2l2-2v-3a8 8 0 0 1 8-8z"/><path d="M9 19a3 3 0 0 0 6 0"/>',
     box: '<rect x="6" y="6" width="12" height="12" rx="2"/>'
   };
-  const DEFAULT_ITEMS = [
-    { id: 1, name: '小叶紫檀手串', cat: '手串', mat: '紫檀', shape: '圆珠', grade: '双金', brand: '檀香世家', days: 365, pinned: true, status: 'active', price: 1580, origPrice: 1880, size: '8×7mm', nickName: '', channel: '潘家园', shipFee: 12, buyDate: '2026-05-20', careCycle: 30, img: IMG_XTZ },
-    { id: 2, name: '白狮子核桃', cat: '核桃', mat: '白狮子', shape: '', grade: '金标', brand: '', days: 210, pinned: false, status: 'active', price: 680, size: '边45/肚38', nickName: '龙吟对', channel: '十里河', shipFee: 8, buyDate: '2026-06-10', careCycle: 20, img: IMG_HT, images: [IMG_HT, IMG_HT_2, IMG_HT_3],
-      sections: [
-        { type: 'text', content: '白狮子头，皮质厚实、纹路粗犷，上手一个月后走色明显，越盘越润。' },
-        { type: 'image', url: IMG_HT_2 },
-        { type: 'text', content: '每天净手盘半小时，底部开始挂瓷，手感渐入佳境。' }
-      ],
-      records: [
-        { id: 101, date: '2026-08-12', emoji: '😊', mood: '手感渐入佳境', note: '下午净手盘了半小时，包浆明显增厚，核桃表面越来越润。', images: [IMG_HT, IMG_HT_2] },
-        { id: 102, date: '2026-08-06', emoji: '🤩', mood: '今天特别亮', note: '用麂皮布打磨了一下，光泽度提升明显，底部开始挂瓷。', images: [IMG_HT_3] }
-      ] },
-    { id: 3, name: '星月菩提手串', cat: '手串', mat: '星月', shape: '无相', grade: '金标', brand: '京工坊', days: 150, pinned: false, status: 'active', price: 520, size: '8×9mm', nickName: '一帘幽梦', channel: '微拍堂', shipFee: 0, buyDate: '2026-07-01', careCycle: 60, icon: 'bead' },
-    { id: 4, name: '金刚菩提手持', cat: '手持', mat: '金刚', shape: '无相', grade: '银标', brand: '', days: 90, pinned: false, status: 'active', price: 780, size: '11×13mm', nickName: '', channel: '淘宝', shipFee: 6, buyDate: '2026-05-17', icon: 'bead' },
-    { id: 5, name: '老山檀香手串', cat: '手串', mat: '紫檀', shape: '老型', grade: '双金', brand: '檀香世家', days: 60, pinned: false, status: 'active', price: 880, size: '9mm', nickName: '', channel: '直播间', shipFee: 0, buyDate: '2026-06-16', icon: 'bead' },
-    { id: 6, name: '崖柏根雕摆件', cat: '摆件', mat: '崖柏', shape: '随形', grade: '金标', brand: '苏工', days: 30, pinned: false, status: 'active', price: 680, size: '约18cm', nickName: '定风波', channel: '潘家园', shipFee: 20, buyDate: '2026-07-16', icon: 'vase' },
-    { id: 7, name: '南红玛瑙挂件', cat: '挂件', mat: '南红玛瑙', shape: '圆珠', grade: '双金', brand: '京工坊', days: 120, pinned: false, status: 'active', price: 1280, size: '24×18mm', nickName: '鸿运当头', channel: '微拍堂', shipFee: 10, buyDate: '2026-04-17', icon: 'gem' },
-    { id: 8, name: '紫砂茶宠', cat: '茶宠', mat: '', shape: '塑形', grade: '银标', brand: '苏工', days: 75, pinned: false, status: 'active', price: 0, size: '', nickName: '', channel: '朋友转让', shipFee: 18, buyDate: '2026-06-01', icon: 'bell' },
-    { id: 9, name: '黄花梨手把件', cat: '把件', mat: '黄花梨', shape: '随形', grade: '金标', brand: '', days: 45, pinned: false, status: 'active', price: 0, size: '约6cm', nickName: '', channel: '朋友转让', shipFee: 12, buyDate: '2026-07-01', icon: 'box' },
-    { id: 10, name: '金刚菩提108长串', cat: '108长串', mat: '金刚', shape: '圆珠', grade: '银标', brand: '', days: 200, pinned: false, status: 'sold', price: 1280, sellPrice: 1600, size: '8mm', nickName: '', channel: '十里河', shipFee: 0, icon: 'bead', buyDate: '2026-01-20', soldDate: '2026-08-08' },
-    { id: 11, name: '四座楼核桃', cat: '核桃', mat: '四座楼', shape: '', grade: '双金', brand: '', days: 180, pinned: false, status: 'sold', price: 900, sellPrice: 1300, size: '边43/肚37', nickName: '', channel: '', shipFee: 0, img: IMG_HT, buyDate: '2026-02-10', soldDate: '2026-07-15' },
-    { id: 12, name: '蜜蜡手串', cat: '手串', mat: '蜜蜡', shape: '老型', grade: '金标', brand: '京工坊', days: 260, pinned: false, status: 'sold', price: 800, sellPrice: 1200, size: '10×12mm', nickName: '秋色', channel: '微拍堂', shipFee: 15, icon: 'gem', buyDate: '2025-11-14', soldDate: '2026-08-01' }
-  ];
   // ==================== IndexedDB 影子备份（仅浏览器/PWA 分支启用） ====================
   // 解决 iOS Safari/PWA 下 localStorage 写入延迟刷盘、进程被杀后数据丢失的问题：
   // 每次写入同步落到 localStorage 之外，再以 readwrite 事务写一份到 IndexedDB（事务提交即持久化，可靠性更高）。
@@ -3710,50 +3875,26 @@
 
   function loadItems() {
     try {
-      let raw = JSON.parse(wwStore.get('wwItems') || 'null');
-      if (Array.isArray(raw) && raw.length) {
-        // v2 数据迁移：旧数据无 images 多图字段 → 从 img 或同 id 默认示例补齐
-        const defById = {};
-        DEFAULT_ITEMS.forEach(d => { defById[d.id] = d; });
+      const raw = JSON.parse(wwStore.get('wwItems') || 'null');
+      if (Array.isArray(raw)) {
+        // 纯字段兜底清洗（不含任何示例 seed 数据）：
         raw.forEach(it => {
+          // 兼容旧数据：images 多图字段缺失时，用单图 img 兜底
           if (!Array.isArray(it.images) || !it.images.length) {
-            const def = defById[it.id];
-            const defImgs = def && Array.isArray(def.images) ? def.images : [];
-            it.images = defImgs.length ? defImgs.slice() : (it.img ? [it.img] : []);
-            if (!it.images.length && it.img) it.images = [it.img];
+            it.images = it.img ? [it.img] : [];
           }
           if (it.images.length) it.img = it.images[0];
-          // v2 数据迁移：旧数据无 sections/records/fav 字段 → 补默认值
           if (!Array.isArray(it.sections)) it.sections = [];
           if (!Array.isArray(it.records)) it.records = [];
           if (typeof it.fav !== 'boolean') it.fav = false;
           if (typeof it.pinned !== 'boolean') it.pinned = !!it.fav;
-          // 天数动态化迁移：旧数据缺 buyDate/soldDate → 从默认示例补齐（保证持有天数可实时计算）
-          const def = defById[it.id];
-          if (def) {
-            if (!it.buyDate && def.buyDate) it.buyDate = def.buyDate;
-            if (it.status === 'sold' && !it.soldDate && def.soldDate) it.soldDate = def.soldDate;
-          }
           // 修复兜底：旧数据经账本「收入+关联藏品」售出误写 sellDate → 补到统一字段 soldDate
           if (it.status === 'sold' && !it.soldDate && it.sellDate) it.soldDate = it.sellDate;
         });
-        // 合并缺失的默认示例藏品（如白狮子核桃），保证新示例一定可见；导入备份恢复后跳过合并，避免混入示例数据
-        raw = raw.slice();
-        if (!wwStore.get('ww_noSeed')) {
-          DEFAULT_ITEMS.forEach(def => {
-            if (!raw.some(it => it.id === def.id)) {
-              const it = JSON.parse(JSON.stringify(def));
-              if (!Array.isArray(it.images) || !it.images.length) {
-                it.images = it.img ? [it.img] : [];
-              }
-              raw.push(it);
-            }
-          });
-        }
         return raw;
       }
     } catch (e) { /* ignore */ }
-    return DEFAULT_ITEMS.slice();
+    return [];
   }
   let ITEMS = loadItems();
   // 置顶收藏双标志统一：兼容旧数据（仅 pinned / 仅 fav / 两者都缺），内存同步避免加载早期触发保存
@@ -3763,38 +3904,24 @@
   });
   // 快照：仅保留 id 引用用于删除检测 → 记墓碑（同步引擎删除依据）
   // 变更项打点由 dirty 标记驱动（修改入口 markDirty），新增/旧数据由 !updatedAt 兜底
-  let _itemsSnap = ITEMS.slice();
+  // 墓碑只由用户明确的删除动作产生（deleteItem/deleteLedger 入口显式调用 addTombstone）。
+  // 不再用快照 diff 判定删除——默认示例 seed / 数据迁移 / 同步回写导致的集合变化不是用户删除，
+  // 若据此记墓碑会批量生成「幽灵墓碑」，进而在合并时误删其它设备的真实数据。
   function saveItems() {
+    // 启动恢复未完成且当前为空时跳过写入：避免「空数组覆盖 IndexedDB 备份」导致关后台重置修复失效（见 restoreFromIDB 门闩）
+    if (_idbRestoring && !ITEMS.length) return;
     const now = Date.now();
-    const curIds = new Set(ITEMS.map(i => i.id));
     ITEMS.forEach(it => {
       if (it._dirty || !it.updatedAt) { it.updatedAt = now; it.deviceId = DEVICE_ID; }
       if (!it.updatedAt) it.updatedAt = now;
       if (!it.deviceId) it.deviceId = DEVICE_ID;
       delete it._dirty;
     });
-    // 检测本次保存中被删除的藏品 → 记墓碑（不物理抹除，供同步删除）
-    _itemsSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('item', old.id, old.name); });
-    _itemsSnap = ITEMS.slice();
     wwStore.set('wwItems', JSON.stringify(ITEMS));
     _itemsVersion++;
     refreshAll();
   }
   // ============ 账本流水数据 ============
-  const DEFAULT_LEDGER = [
-    { id: 1, type: 'care', category: 'care', amount: 0, date: '2026-08-12', time: '20:30', name: '小叶紫檀手串', note: '上油', img: IMG_XTZ },
-    { id: 2, type: 'expense', category: 'tool', amount: 45, date: '2026-08-11', time: '21:05', name: '购入文玩油', note: '工具' },
-    { id: 3, type: 'expense', category: 'buy', amount: 680, date: '2026-08-10', time: '11:20', name: '购入：崖柏根雕摆件', note: '自动记账', itemId: 6 },
-    { id: 4, type: 'income', category: 'sale', amount: 1600, date: '2026-08-08', time: '16:08', name: '回血：金刚菩提108长串', note: '藏品回血', itemId: 10 },
-    { id: 5, type: 'expense', category: 'tool', amount: 35, date: '2026-08-05', time: '19:12', name: '购入刷子套装', note: '工具' },
-    { id: 6, type: 'expense', category: 'tool', amount: 8, date: '2026-08-03', time: '15:40', name: '购入棉布手套', note: '工具' },
-    { id: 7, type: 'expense', category: 'buy', amount: 680, date: '2026-07-28', time: '10:45', name: '购入：白狮子核桃', note: '自动记账', img: IMG_HT, itemId: 2 },
-    { id: 8, type: 'expense', category: 'buy', amount: 520, date: '2026-07-15', time: '09:30', name: '购入：星月菩提手串', note: '自动记账', itemId: 3 },
-    { id: 9, type: 'expense', category: 'express', amount: 8, date: '2026-07-28', time: '10:50', name: '快递费：白狮子核桃', note: '购入运费', itemId: 2, expressKind: 'buy' },
-    { id: 10, type: 'expense', category: 'express', amount: 18, date: '2026-08-02', time: '14:20', name: '快递费：紫砂茶宠', note: '购入运费', itemId: 8, expressKind: 'buy' },
-    { id: 11, type: 'expense', category: 'express', amount: 12, date: '2026-08-08', time: '16:30', name: '快递费：金刚菩提108长串', note: '回血运费', itemId: 10, expressKind: 'sell' },
-    { id: 12, type: 'expense', category: 'buy', amount: 780, date: '2026-08-01', time: '10:15', name: '购入：金刚菩提手持', note: '自动记账', itemId: 4 }
-  ];
   const LEDGER_CATS = {
     all:     { label: '全部' },
     buy:     { label: '藏品花销' },
@@ -3809,23 +3936,95 @@
       const raw = JSON.parse(wwStore.get('wwLedger') || 'null');
       if (Array.isArray(raw)) return raw;
     } catch (e) { /* ignore */ }
-    return DEFAULT_LEDGER.slice();
+    return [];
   }
   let ledger = loadLedger();
-  let _ledgerSnap = ledger.slice();
   function saveLedger() {
+    // 启动恢复未完成且当前为空时跳过写入：避免「空数组覆盖 IndexedDB 备份」（见 restoreFromIDB 门闩）
+    if (_idbRestoring && !ledger.length) return;
     const now = Date.now();
-    const curIds = new Set(ledger.map(r => r.id));
     ledger.forEach(r => {
       if (r._dirty || !r.updatedAt) { r.updatedAt = now; r.deviceId = DEVICE_ID; }
       if (!r.updatedAt) r.updatedAt = now;
       if (!r.deviceId) r.deviceId = DEVICE_ID;
       delete r._dirty;
     });
-    _ledgerSnap.forEach(old => { if (!curIds.has(old.id)) addTombstone('ledger', old.id, old.name); });
-    _ledgerSnap = ledger.slice();
     wwStore.set('wwLedger', JSON.stringify(ledger));
     refreshAll();
+  }
+  // ============ 中奖记录数据 ============
+  // 奖品类型池（默认 藏品/耗材/其他，可动态新增并持久化到 wwCats['奖品类型']）
+  const DEFAULT_WIN_TYPES = ['藏品', '耗材', '其他'];
+  function loadWinTypes() {
+    try {
+      const raw = JSON.parse(wwStore.get('wwCats') || 'null');
+      if (raw && Array.isArray(raw['奖品类型']) && raw['奖品类型'].length) {
+        return raw['奖品类型'].slice();
+      }
+    } catch (e) { /* ignore */ }
+    return DEFAULT_WIN_TYPES.slice();
+  }
+  function saveWinTypes(list) {
+    try {
+      const raw = JSON.parse(wwStore.get('wwCats') || 'null') || {};
+      raw['奖品类型'] = list.slice();
+      wwStore.set('wwCats', JSON.stringify(raw));
+    } catch (e) { /* ignore */ }
+  }
+  function loadWins() {
+    try {
+      const raw = JSON.parse(wwStore.get('wwWins') || 'null');
+      if (Array.isArray(raw)) {
+        raw.forEach(w => {
+          if (typeof w.type !== 'string' || !w.type) w.type = '藏品';
+          if (typeof w.cat !== 'string') w.cat = '';
+          if (typeof w.mat !== 'string') w.mat = '';
+          if (typeof w.shape !== 'string') w.shape = '';
+          if (typeof w.grade !== 'string') w.grade = '';
+          if (typeof w.brand !== 'string') w.brand = '';
+          if (typeof w.channel !== 'string') w.channel = '';
+          if (typeof w.shipFee !== 'number' || isNaN(w.shipFee)) w.shipFee = 0;
+          if (typeof w.winDate !== 'string') w.winDate = '';
+          if (typeof w.account !== 'string') w.account = '';
+          if (typeof w.phone !== 'string') w.phone = '';
+          if (typeof w.address !== 'string') w.address = '';
+          if (typeof w.note !== 'string') w.note = '';
+          if (typeof w.claimed !== 'boolean') w.claimed = false;
+          if (typeof w.claimedAt !== 'string') w.claimedAt = '';
+          if (typeof w.linkedItemId !== 'number') w.linkedItemId = 0;
+        });
+        return raw;
+      }
+    } catch (e) { /* ignore */ }
+    return [];
+  }
+  let WINS = loadWins();
+  function saveWins() {
+    // 启动恢复未完成且当前为空时跳过写入：避免「空数组覆盖 IndexedDB 备份」
+    if (_idbRestoring && !WINS.length) return;
+    const now = Date.now();
+    WINS.forEach(w => {
+      if (w._dirty || !w.updatedAt) { w.updatedAt = now; w.deviceId = DEVICE_ID; }
+      if (!w.updatedAt) w.updatedAt = now;
+      if (!w.deviceId) w.deviceId = DEVICE_ID;
+      delete w._dirty;
+    });
+    wwStore.set('wwWins', JSON.stringify(WINS));
+    _winsVersion++;
+    refreshAll();
+  }
+  function nextWinId() { return WINS.length ? Math.max.apply(null, WINS.map(w => w.id)) + 1 : 1; }
+  // 已领取 → 非藏品类型领取时，把快递费记入账本（category='express' 快递费支出）
+  function claimExpenseRecord(w) {
+    return {
+      type: 'expense',
+      category: 'express',
+      amount: (typeof w.shipFee === 'number' && !isNaN(w.shipFee)) ? w.shipFee : 0,
+      date: todayStr(),
+      time: nowTimeStr(),
+      name: (w.type || '奖品') + '快递费',
+      note: (w.brand ? w.brand + ' ' : '') + (w.cat || '') + (w.channel ? ' 中奖渠道：' + w.channel : '')
+    };
   }
   // 持有天数实时计算：在盘 = 购入日期 → 今天；已售 = 购入日期 → 售出日期截止（旧数据缺售出日期时回退到今天）
   function heldDays(it) {
@@ -3877,7 +4076,8 @@
     器型: ['老型', '圆珠', '无相', '随形', '塑形'],
     品种: ['白狮子', '四座楼', '苹果园', '南疆石', '磨盘', '蛤蟆头', '狮子头'],
     等级: ['双金', '金标', '银标'],
-    渠道: ['潘家园', '十里河', '微拍堂', '闲鱼', '淘宝', '直播间', '朋友转让']
+    渠道: ['潘家园', '十里河', '微拍堂', '闲鱼', '淘宝', '直播间', '朋友转让'],
+    奖品类型: ['藏品', '耗材', '其他']
   };
   // 每个品类的下级维度配置（材质 / 品种 / 器型 / 等级；材质与品种互斥，可多选）
   const DIM_OPTIONS = ['材质', '品种', '器型', '等级'];
@@ -4004,10 +4204,11 @@
       return {
         showCardPrice: !!p.showCardPrice,
         showCatInName: p.showCatInName !== false,
-        detailAutoPlay: p.detailAutoPlay !== false
+        detailAutoPlay: p.detailAutoPlay !== false,
+        autoSync: p.autoSync !== false
       };
     } catch (e) {
-      return { showCardPrice: false, showCatInName: true, detailAutoPlay: true };
+      return { showCardPrice: false, showCatInName: true, detailAutoPlay: true, autoSync: true };
     }
   }
   function savePrefs() {
@@ -4145,6 +4346,7 @@
   // 藏品列表渲染缓存：数据或视图未变时复用 DOM，避免切页/切分类时反复 innerHTML 重建
   let _itemsVersion = 0;             // 数据内容级变更计数（saveItems / 同步回写时自增）
   let _itemsRenderSig = '';          // 上次渲染的签名
+  let _winsVersion = 0;              // 中奖记录内容级变更计数（saveWins 自增）
   function renderItems(force) {
     const sig = _itemsVersion + '|' + selectedKey + '|' + itemSearch + '|' +
       (prefs.showCardPrice ? '1' : '0') + (prefs.showCatInName ? '1' : '0') + '|' +
@@ -5473,6 +5675,322 @@
     $('ledgerEmpty').classList.toggle('hidden', rows.length > 0);
     $('ledgerEmpty').textContent = ledgerEmptyLabel();
   }
+  // ============ 中奖记录页 ============
+  function winName(w) {
+    if (w.name) return w.name;
+    return [w.brand, w.cat, w.mat, w.shape].filter(Boolean).join(' ') || (w.type || '奖品');
+  }
+  function winTypeClass(t) {
+    if (t === '藏品') return '';
+    if (t === '耗材') return 'tag-material';
+    return 'tag-other';
+  }
+  function winCardHtml(w) {
+    const fee = (typeof w.shipFee === 'number' && !isNaN(w.shipFee)) ? w.shipFee : 0;
+    const feeText = fee > 0 ? '¥' + fmtMoney(fee) : '无';
+    const statusText = w.claimed ? '已领取' : '待领取';
+    const claimedCls = w.claimed ? ' claimed' : '';
+    const date = w.winDate || '—';
+    return '<div class="win-card' + claimedCls + '" data-id="' + w.id + '">' +
+      '<div class="win-top">' +
+        '<span class="win-type-tag ' + winTypeClass(w.type) + '">' + escapeHtml(w.type || '奖品') + '</span>' +
+        '<div class="win-name">' + escapeHtml(winName(w)) + '</div>' +
+        '<span class="win-status">' + statusText + '</span>' +
+      '</div>' +
+      '<div class="win-meta">' +
+        (w.grade ? '<span><span class="meta-label">等级 </span>' + escapeHtml(w.grade) + '</span>' : '') +
+        (w.channel ? '<span><span class="meta-label">渠道 </span>' + escapeHtml(w.channel) + '</span>' : '') +
+        '<span><span class="meta-label">中奖日期 </span>' + escapeHtml(date) + '</span>' +
+        (w.account ? '<span><span class="meta-label">账号 </span>' + escapeHtml(w.account) + '</span>' : '') +
+        (w.phone ? '<span><span class="meta-label">电话 </span>' + escapeHtml(w.phone) + '</span>' : '') +
+        (w.address ? '<span class="win-addr"><span class="meta-label">地址 </span>' + escapeHtml(w.address) + '</span>' : '') +
+      '</div>' +
+      '<div class="win-footer">' +
+        '<div class="win-fee">快递费 <b>' + feeText + '</b></div>' +
+        (w.claimed
+          ? (w.claimedAt ? '<div class="win-claimed-at">领取于 ' + escapeHtml(w.claimedAt) + '</div>' : '')
+          : '<button class="win-claim-btn" data-id="' + w.id + '">去领取</button>') +
+      '</div>' +
+    '</div>';
+  }
+  function renderWins() {
+    const pending = WINS.filter(w => !w.claimed);
+    const claimed = WINS.filter(w => w.claimed);
+    $('winStatPending').textContent = pending.length;
+    $('winStatClaimed').textContent = claimed.length;
+    const listEl = $('winList');
+    if (!WINS.length) {
+      listEl.innerHTML =
+        '<div class="win-empty">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM7 6H4a2 2 0 0 0 2 4h2M17 6h3a2 2 0 0 1-2 4h-2"/></svg>' +
+          '<div>还没有中奖记录<br>点右上角 <b>＋</b> 录入第一件奖品</div>' +
+        '</div>';
+      return;
+    }
+    listEl.innerHTML = pending.map(winCardHtml).join('') + claimed.map(winCardHtml).join('');
+  }
+  // 中奖列表事件：已领取按钮 / 卡片点击编辑
+  $('winList').addEventListener('click', e => {
+    const btn = e.target.closest('.win-claim-btn');
+    if (btn) { claimWin(parseInt(btn.dataset.id, 10)); return; }
+    const card = e.target.closest('.win-card');
+    if (card) { editWin(parseInt(card.dataset.id, 10)); }
+  });
+  // ============ 中奖奖品弹层逻辑 ============
+  // 奖品类型池渲染（独立于 POOLS，持久化到 wwCats['奖品类型']，可动态新增）
+  function renderWinTypeChips() {
+    const container = $('winTypeChips');
+    container.innerHTML = WIN_TYPES.map(v =>
+      '<div class="opt-chip' + (v === winState.type ? ' active' : '') + '" data-v="' + escapeHtml(v) + '">' + escapeHtml(v) + '</div>'
+    ).join('') + '<div class="opt-chip chip-add">+ 添加</div>';
+    container.querySelectorAll('.opt-chip:not(.chip-add)').forEach(c => {
+      c.addEventListener('click', () => { winState.type = c.dataset.v; renderWinTypeChips(); syncWinTypeFields(); });
+    });
+    const addEl = container.querySelector('.chip-add');
+    addEl.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.className = 'chip-add-input';
+      input.placeholder = '输入新奖品类型，回车添加';
+      input.maxLength = 8;
+      addEl.replaceWith(input);
+      input.focus();
+      let done = false;
+      const commit = () => {
+        if (done) return;
+        done = true;
+        const v = input.value.trim();
+        if (v) {
+          if (WIN_TYPES.indexOf(v) < 0) { WIN_TYPES.push(v); saveWinTypes(WIN_TYPES); }
+          winState.type = v;
+          renderWinTypeChips();
+        }
+      };
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') { done = true; renderWinTypeChips(); }
+      });
+      input.addEventListener('blur', commit);
+    });
+  }
+  // 按奖品类型切换字段：非藏品时隐藏品类/材质/器型/等级，仅填物品名称
+  function syncWinTypeFields() {
+    const isColl = (winState.type || '藏品') === '藏品';
+    const nameRow = $('winNameRow');
+    const dimFields = $('winDimFields');
+    if (nameRow) nameRow.classList.toggle('hidden', isColl);
+    if (dimFields) dimFields.classList.toggle('hidden', !isColl);
+  }
+  function syncWinDimRows() {
+    const dims = dimsFor(winState.cat);
+    $('winMatRow').classList.toggle('hidden', dims.indexOf('材质') < 0 && dims.indexOf('品种') < 0);
+    $('winShapeRow').classList.toggle('hidden', dims.indexOf('器型') < 0);
+    $('winGradeRow').classList.toggle('hidden', dims.indexOf('等级') < 0);
+  }
+  function renderWinCatChips() {
+    renderItemChips($('winCatChips'), ITEM_CATS, winState.cat, v => {
+      winState.cat = v;
+      const dims = dimsFor(v);
+      if (dims.indexOf('品种') >= 0) {
+        if (ITEM_MATS.indexOf(winState.mat) < 0) winState.mat = ITEM_MATS[0] || '';
+        winState.shape = '';
+      } else {
+        if (dims.indexOf('材质') >= 0) {
+          if (ITEM_MATS.indexOf(winState.mat) < 0) winState.mat = ITEM_MATS[0] || '';
+        } else {
+          winState.mat = '';
+        }
+        if (dims.indexOf('器型') >= 0) {
+          if (ITEM_SHAPES.indexOf(winState.shape) < 0) winState.shape = ITEM_SHAPES[0] || '';
+        } else {
+          winState.shape = '';
+        }
+      }
+      syncWinDimRows();
+      renderWinMatChips();
+      renderWinShapeChips();
+      renderWinGradeChips();
+      renderWinCatChips();
+    }, '品类', renderWinCatChips);
+  }
+  function renderWinMatChips() {
+    renderItemChips($('winMatChips'), ITEM_MATS, winState.mat, v => {
+      winState.mat = v;
+      renderWinMatChips();
+    }, '材质', renderWinMatChips);
+  }
+  function renderWinShapeChips() {
+    renderItemChips($('winShapeChips'), ITEM_SHAPES, winState.shape, v => {
+      winState.shape = v;
+      renderWinShapeChips();
+    }, '器型', renderWinShapeChips);
+  }
+  function renderWinGradeChips() {
+    renderItemChips($('winGradeChips'), GRADE_POOL, winState.grade, v => {
+      winState.grade = v;
+      renderWinGradeChips();
+    }, '等级', renderWinGradeChips);
+  }
+  function renderWinChannelChips() {
+    renderItemChips($('winChannelChips'), ITEM_CHANNELS, winState.channel, v => {
+      winState.channel = v;
+      renderWinChannelChips();
+    }, '渠道', renderWinChannelChips);
+  }
+  function openWinSheet(editId) {
+    const w = editId ? WINS.find(x => x.id === editId) : null;
+    if (w) {
+      winState = { type: w.type || WIN_TYPES[0] || '藏品', cat: w.cat || ITEM_CATS[0], mat: w.mat || '', shape: w.shape || '', grade: w.grade || '', channel: w.channel || '' };
+      $('winNameInput').value = w.name || '';
+      $('winBrandInput').value = w.brand || '';
+      $('winShipFeeInput').value = w.shipFee || '';
+      $('winDateInput').value = w.winDate || todayStr();
+      $('winAccountInput').value = w.account || '';
+      $('winPhoneInput').value = w.phone || '';
+      $('winAddressInput').value = w.address || '';
+      $('winNoteInput').value = w.note || '';
+      $('winSheetTitle').textContent = '编辑奖品';
+      $('winId').value = w.id;
+      $('winDelBtn').classList.remove('hidden');
+    } else {
+      winState = { type: WIN_TYPES[0] || '藏品', cat: ITEM_CATS[0], mat: ITEM_MATS[0] || '', shape: ITEM_SHAPES[0] || '', grade: GRADE_POOL[0] || '', channel: '' };
+      $('winNameInput').value = '';
+      $('winBrandInput').value = '';
+      $('winShipFeeInput').value = '';
+      $('winDateInput').value = todayStr();
+      $('winAccountInput').value = '';
+      $('winPhoneInput').value = '';
+      $('winAddressInput').value = '';
+      $('winNoteInput').value = '';
+      $('winSheetTitle').textContent = '新增奖品';
+      $('winId').value = '';
+      $('winDelBtn').classList.add('hidden');
+    }
+    if (WIN_TYPES.indexOf(winState.type) < 0) winState.type = WIN_TYPES[0] || '藏品';
+    syncWinTypeFields();
+    syncWinDimRows();
+    renderWinTypeChips();
+    renderWinCatChips();
+    renderWinMatChips();
+    renderWinShapeChips();
+    renderWinGradeChips();
+    renderWinChannelChips();
+    winMaskEl.classList.add('show');
+    winSheetEl.classList.remove('hidden');
+    winSheetEl.classList.add('show');
+  }
+  function closeWinSheet() {
+    winMaskEl.classList.remove('show');
+    winSheetEl.classList.remove('show');
+  }
+  function saveWinSheet() {
+    const id = +$('winId').value || 0;
+    const w = id ? WINS.find(x => x.id === id) : null;
+    const shipFee = parseFloat($('winShipFeeInput').value) || 0;
+    const isCollType = (winState.type || '藏品') === '藏品';
+    const data = {
+      type: winState.type || '藏品',
+      // 非藏品仅记录物品名称；藏品记录品类/材质/器型/等级
+      name: isCollType ? '' : $('winNameInput').value.trim(),
+      cat: isCollType ? winState.cat : '',
+      mat: isCollType ? (winState.mat || '') : '',
+      shape: isCollType ? (winState.shape || '') : '',
+      grade: isCollType ? (winState.grade || '') : '',
+      brand: $('winBrandInput').value.trim(),
+      channel: winState.channel || '',
+      shipFee: shipFee,
+      winDate: $('winDateInput').value || todayStr(),
+      account: $('winAccountInput').value.trim(),
+      phone: $('winPhoneInput').value.trim(),
+      address: $('winAddressInput').value.trim(),
+      note: $('winNoteInput').value.trim()
+    };
+    if (w) {
+      Object.assign(w, data);
+      w._dirty = true;
+    } else {
+      WINS.push(Object.assign({ id: nextWinId(), claimed: false, claimedAt: '', linkedItemId: 0 }, data));
+    }
+    saveWins();
+    closeWinSheet();
+    if (currentTab === 'wins') renderWins();
+  }
+  // 打开编辑既有奖品
+  function editWin(id) {
+    const w = WINS.find(x => x.id === id);
+    if (!w) return;
+    openWinSheet(id);
+  }
+  // 「已领取」联动：藏品 → 转新增藏品（预填，保存后标记）；耗材/其他/自定义 → 记快递费到账本后标记
+  function claimWin(id) {
+    const w = WINS.find(x => x.id === id);
+    if (!w) return;
+    const nm = winName(w);
+    const fee = (typeof w.shipFee === 'number' && !isNaN(w.shipFee)) ? w.shipFee : 0;
+    const isColl = w.type === '藏品';
+    showConfirm({
+      title: '确认已领取',
+      message: '确认「' + nm + '」已领取？\n\n' + (isColl
+        ? '将跳转录入为藏品（自动预填中奖信息），保存后该奖品标记为已领取。'
+        : '将把快递费 ¥' + fmtMoney(fee) + ' 记入账本，该奖品标记为已领取。'),
+      confirmText: '去领取',
+      extraHtml:
+        '<div class="sheet-label" style="margin-top:12px;">领取时间</div>' +
+        '<input type="date" class="form-input full" id="confirmClaimDate" value="' + todayStr() + '">',
+      onConfirm: () => {
+        const dateInput = $('confirmClaimDate');
+        const claimDate = (dateInput && dateInput.value) || todayStr();
+        if (isColl) {
+          closeWinSheet();
+          _winClaimPending = { winId: w.id, claimedAt: claimDate };
+          openItemSheet(0, {
+            cat: w.cat, mat: w.mat, shape: w.shape, grade: w.grade,
+            brand: w.brand, channel: w.channel, shipFee: fee,
+            winDate: w.winDate, note: w.note
+          });
+        } else {
+          if (fee > 0) {
+            const rec = claimExpenseRecord(w);
+            ledger.push(Object.assign({ id: nextLedgerId(), itemId: 0, deviceId: DEVICE_ID }, rec));
+            saveLedger();
+          }
+          w.claimed = true;
+          w.claimedAt = claimDate;
+          w._dirty = true;
+          saveWins();
+          renderWins();
+        }
+      }
+    });
+  }
+  // 删除中奖记录（二次确认后移除，并写墓碑供局域网同步在其它设备删除同 id 记录）
+  function confirmDeleteWin(id) {
+    const w = WINS.find(x => x.id === id);
+    if (!w) return;
+    const nm = w.name || ('奖项 #' + id);
+    showConfirm({
+      title: '删除中奖记录',
+      message: '确定删除「' + nm + '」吗？\n\n删除后不可恢复。',
+      confirmText: '删除',
+      onConfirm: () => {
+        addTombstone('wins', id, nm); // 写墓碑，供局域网同步在其它设备删除同 id 中奖记录
+        WINS = WINS.filter(x => x.id !== id);
+        saveWins();
+        renderWins();
+        closeWinSheet(); // 删除后关闭编辑弹层
+        toast('已删除：' + nm);
+      }
+    });
+  }
+  // 中奖奖品弹层 DOM 引用（提前声明，避免后续 winMaskEl/winSheetEl 顶层使用时的 TDZ 问题）
+  const winSheetEl = $('winSheet');
+  const winMaskEl = $('winMask');
+  // 事件绑定
+  winMaskEl.addEventListener('click', closeWinSheet);
+  $('winSheetClose').addEventListener('click', closeWinSheet);
+  $('winDelBtn').addEventListener('click', () => { confirmDeleteWin(+$('winId').value || 0); });
+  $('winResetBtn').addEventListener('click', () => { openWinSheet(+$('winId').value || 0); });
+  $('winSaveBtn').addEventListener('click', saveWinSheet);
+  $('winsAddBtn').addEventListener('click', () => openWinSheet(0));
   // 分类标签（账本页）切换
   $('ledgerCatBar').addEventListener('click', e => {
     const chip = e.target.closest('.cat-chip');
@@ -5645,6 +6163,11 @@
   const itemMaskEl = $('itemMask');
   let itemState = { cat: ITEM_CATS[0], mat: ITEM_MATS[0], shape: ITEM_SHAPES[0], grade: GRADE_POOL[0], status: 'active', careCycle: '', channel: '' };
   let itemPhotos = []; // 编辑弹层中待保存的多图数组（迁移：单图 → 多图）
+  // ============ 中奖奖品弹层状态 ============
+  let WIN_TYPES = loadWinTypes(); // 奖品类型池（可动态新增，持久化到 wwCats['奖品类型']）
+  // 注意：winState 初始值不引用 ITEM_CATS/POOLS（定义于 L6088+，此处提前执行会 TDZ 报错），openWinSheet 打开时会正确赋值
+  let winState = { type: (WIN_TYPES[0] || '藏品'), cat: '', mat: '', shape: '', grade: '', channel: '' };
+  let _winClaimPending = null; // 中奖领取转藏品：{ winId }，藏品保存成功后消费（在 saveItemSheet 新增分支）
   // ============ 多图兼容工具（迁移：images 数组，向后兼容旧 img 单字段） ============
   // 返回藏品的图片数组；旧数据只有 img 时自动包装为数组
   function imagesOf(it) {
@@ -5817,26 +6340,27 @@
       renderItemChannelChips();
     }, '渠道', renderItemChannelChips);
   }
-  function openItemSheet(editId) {
+  function openItemSheet(editId, prefill) {
     const it = editId ? ITEMS.find(x => x.id === editId) : null;
+    const pf = (!it && prefill) ? prefill : null; // 中奖转藏品：新增模式下用奖品字段预填
     itemState = it
       ? { cat: it.cat, mat: it.mat || '', shape: it.shape || '', grade: it.grade || '', status: it.status || 'active', careCycle: it.careCycle || '', channel: it.channel || '' }
-      : { cat: ITEM_CATS[0], mat: ITEM_MATS[0] || '', shape: ITEM_SHAPES[0] || '', grade: GRADE_POOL[0] || '', status: 'active', careCycle: '', channel: '' };
+      : { cat: (pf && pf.cat) || ITEM_CATS[0], mat: (pf && pf.mat) || ITEM_MATS[0] || '', shape: (pf && pf.shape) || ITEM_SHAPES[0] || '', grade: (pf && pf.grade) || GRADE_POOL[0] || '', status: 'active', careCycle: '', channel: (pf && pf.channel) || '' };
     $('itemMatLabel').textContent = '材质';
     $('itemShapeLabel').textContent = '器型';
     syncItemDimRows();
-    $('itemBrandInput').value = it ? it.brand || '' : '';
+    $('itemBrandInput').value = it ? it.brand || '' : (pf ? pf.brand || '' : '');
     $('itemNickInput').value = it ? it.nickName || '' : '';
     $('itemSizeInput').value = it ? it.size || '' : '';
     $('itemOrigPriceInput').value = it ? it.origPrice || '' : '';
     $('itemPriceInput').value = it ? it.price || '' : '';
-    $('itemShipFeeInput').value = it ? it.shipFee || '' : '';
-    $('itemBuyDateInput').value = it ? (it.buyDate || todayStr()) : todayStr();
+    $('itemShipFeeInput').value = it ? it.shipFee || '' : (pf ? pf.shipFee || '' : '');
+    $('itemBuyDateInput').value = it ? (it.buyDate || todayStr()) : (pf ? pf.winDate || todayStr() : todayStr());
     $('itemPlayDateInput').value = it ? (it.playStartDate || it.buyDate || todayStr()) : todayStr();
-    $('itemNoteInput').value = it ? it.note || '' : '';
+    $('itemNoteInput').value = it ? it.note || '' : (pf ? pf.note || '' : '');
     itemPhotos = imagesOf(it);
     renderItemPhotoGrid();
-    $('itemSheetTitle').textContent = it ? '编辑藏品' : '新增藏品';
+    $('itemSheetTitle').textContent = it ? '编辑藏品' : (pf ? '新增藏品（中奖领取）' : '新增藏品');
     itemSheetEl.dataset.editId = it ? it.id : '';
     renderItemCatChips();
     renderItemMatChips();
@@ -5914,6 +6438,18 @@
     if (itemPhotos.length) setItemImages(item, itemPhotos); else item.icon = iconForCat(itemState.cat);
     ITEMS.push(item);
     saveItems();
+    // 中奖领取转藏品：藏品保存成功后，把对应奖品标记已领取并关联
+    if (_winClaimPending && _winClaimPending.winId) {
+      const w = WINS.find(x => x.id === _winClaimPending.winId);
+      if (w) {
+        w.claimed = true;
+        w.claimedAt = _winClaimPending.claimedAt || todayStr();
+        w.linkedItemId = item.id;
+        w._dirty = true;
+        saveWins();
+      }
+      _winClaimPending = null;
+    }
     // 自动记账：购入价（buy）+ 快递费（express，关联藏品与购入标记）
     if (price > 0 || shipFee > 0) {
       let rid = nextLedgerId();
@@ -5985,6 +6521,15 @@
     $('confirmTitle').textContent = opts.title || '确认';
     $('confirmMsg').textContent = opts.message || '';
     $('confirmOk').textContent = opts.confirmText || '确认';
+    // 可选扩展区：在消息下方注入自定义 HTML（如领取时间选择器），仅调用方传 extraHtml 时生成
+    let extra = $('confirmExtra');
+    if (!extra) {
+      extra = document.createElement('div');
+      extra.id = 'confirmExtra';
+      extra.className = 'confirm-extra';
+      $('confirmMsg').insertAdjacentElement('afterend', extra);
+    }
+    extra.innerHTML = opts.extraHtml || '';
     $('confirmMask').classList.add('show');
     $('confirmSheet').classList.remove('hidden');
     $('confirmSheet').classList.add('show');
@@ -5992,6 +6537,9 @@
   function closeConfirm() {
     $('confirmMask').classList.remove('show');
     $('confirmSheet').classList.remove('show');
+    // 清理扩展区，避免多次领取重复残留
+    const extra = $('confirmExtra');
+    if (extra) extra.innerHTML = '';
     confirmCb = null;
   }
   $('confirmClose').addEventListener('click', closeConfirm);
@@ -6010,7 +6558,8 @@
       onConfirm: () => {
         ITEMS = ITEMS.filter(x => x.id !== id);
         ledger = ledger.filter(r => r.itemId !== id);
-        wwStore.set('ww_noSeed', '1');
+        // 用户明确删除藏品 → 记墓碑（同步引擎据此在其它设备删除同一 id）
+        addTombstone('item', id, nm);
         saveItems();
         saveLedger();
         renderNav();
@@ -6360,7 +6909,10 @@
   $('ledgerDelBtn').addEventListener('click', () => {
     if (ledgerEditId == null) return;
     if (!confirm('确定删除这条账本记录吗？')) return;
+    const r = ledger.find(x => x.id === ledgerEditId);
     ledger = ledger.filter(r => r.id !== ledgerEditId);
+    // 用户明确删除账本 → 记墓碑（同步引擎据此在其它设备删除同一 id）
+    addTombstone('ledger', ledgerEditId, (r && r.name) || '');
     saveLedger();
     renderLedger();
     closeLedgerSheet();
@@ -6549,7 +7101,7 @@
 
   // ============ 数据备份：导出 / 导入 ============
   const BACKUP_APP = 'ww-ledger-book';
-  const BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwCats', 'wwPrefs', 'itemsNavV2', 'itemsNavHidden', 'appName', 'avatar', 'ww_recordView', 'wwTombstones'];
+  const BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwCats', 'wwPrefs', 'itemsNavV2', 'itemsNavHidden', 'appName', 'avatar', 'ww_recordView', 'wwTombstones', 'wwWins'];
   function exportBackup() {
     try {
       const data = {};
@@ -6590,8 +7142,6 @@
         onConfirm: () => {
           try {
             Object.keys(payload.data).forEach(k => wwStore.set(k, payload.data[k]));
-            // 导入恢复后跳过默认示例合并，确保只显示备份中的藏品
-            if ('wwItems' in payload.data) wwStore.set('ww_noSeed', '1');
             toast('导入成功，正在刷新…');
             setTimeout(() => location.reload(), 600);
           } catch (e) {
@@ -6694,7 +7244,7 @@
       return e;
     }
     if (/load failed|failed to fetch|networkerror|network error|connection refused|connect/i.test(msg)) {
-      const e = new Error('无法连接电脑端。请确认电脑已运行「一键同步主机」、手机和电脑在同一 WiFi，且同步地址为「电脑IP:8899」（如 192.168.1.5:8899）。');
+      const e = new Error('无法连接电脑端。请确认电脑已打开「文玩记录本」桌面应用、手机和电脑在同一 WiFi，且同步地址填「电脑IP:4789」（如 192.168.1.5:4789）。');
       e._friendly = true;
       return e;
     }
@@ -6732,7 +7282,8 @@
       wwItems: JSON.parse(JSON.stringify(ITEMS)),
       wwLedger: JSON.parse(JSON.stringify(ledger)),
       wwCats: catsRaw,
-      wwTombstones: JSON.parse(JSON.stringify(TOMBSTONES))
+      wwTombstones: JSON.parse(JSON.stringify(TOMBSTONES)),
+      wwWins: JSON.parse(JSON.stringify(WINS))
     };
   }
 
@@ -6741,13 +7292,11 @@
     if (!data || typeof data !== 'object') throw new Error('同步返回的数据格式不正确');
     if (Array.isArray(data.wwItems)) {
       ITEMS = data.wwItems;
-      _itemsSnap = ITEMS.slice();
       wwStore.set('wwItems', JSON.stringify(ITEMS));
       _itemsVersion++;
     }
     if (Array.isArray(data.wwLedger)) {
       ledger = data.wwLedger;
-      _ledgerSnap = ledger.slice();
       wwStore.set('wwLedger', JSON.stringify(ledger));
     }
     if (data.wwCats && typeof data.wwCats === 'object' && Array.isArray(data.wwCats['品类'])) {
@@ -6761,10 +7310,16 @@
       TOMBSTONES = data.wwTombstones;
       saveTombstones();
     }
+    if (Array.isArray(data.wwWins)) {
+      WINS = data.wwWins;
+      wwStore.set('wwWins', JSON.stringify(WINS));
+      _winsVersion++;
+    }
     refreshAll();
     if (typeof renderNav === 'function') renderNav();
     if (typeof renderItems === 'function') renderItems();
     if (typeof renderLedger === 'function') renderLedger();
+    if (typeof renderWins === 'function') renderWins();
     if (typeof syncFilterUI === 'function') syncFilterUI();
     if (typeof updateFilterBadges === 'function') updateFilterBadges();
     if (typeof applyActiveFilter === 'function') applyActiveFilter();
@@ -6802,6 +7357,36 @@
         applyMerged(res.data);
         return res.stats || { added: 0, updated: 0, removed: 0 };
       });
+  }
+
+  // 自动同步：打开应用时若已配置同步地址且开启自动同步，则静默同步一次。
+  // 成功 → 电脑 data.json 成为数据真身；失败 → 静默保留本地数据，不打扰用户（离线场景照常使用）。
+  function autoSyncIfConfigured() {
+    try {
+      if (wwStore.isElectron) return;              // 桌面端本身就是主机，无需自动同步
+      if (!prefs.autoSync) return;                 // 用户关闭了自动同步
+      const host = (prefs.syncHost || '').trim();
+      if (!host) return;                           // 尚未配置同步地址，等用户首次手动填
+      const pin = (prefs.syncPin || '').trim();
+      const base = syncBaseUrl(host);
+      if (location.protocol === 'https:' && /^http:\/\//.test(base)) return; // HTTPS 页面连不了 http 主机，跳过
+      doSync(host, pin)
+        .then(stats => {
+          try {
+            const t = syncStatusText;
+            const total = (stats && (stats.added || 0)) + (stats.updated || 0) + (stats.removed || 0);
+            if (t) t.textContent = total > 0
+              ? '自动同步完成：新增 ' + (stats.added || 0) + ' · 更新 ' + (stats.updated || 0) + ' · 删除 ' + (stats.removed || 0)
+              : '自动同步完成（数据一致）';
+          } catch (e) { /* ignore */ }
+        })
+        .catch(() => {
+          // 连不上电脑 → 数据保留在本地，出门照常可录；提示离线状态，不打扰、不弹错
+          try {
+            if (syncStatusText) syncStatusText.textContent = '未连接电脑，正在使用本地数据（出门也能录）';
+          } catch (e) { /* ignore */ }
+        });
+    } catch (e) { /* 自动同步任何异常都不应影响正常使用 */ }
   }
 
   // 自动发现：扫描本机网段前 40 个主机，找到响应 /api/info 的同步主机（桌面端可直接用，浏览器端无本机 IP 时跳过）
@@ -6860,15 +7445,9 @@
       }
     } catch (e) { /* ignore */ }
   } else if (_localAddrs.length) {
-    // 浏览器端：若页面正从局域网 http（合一服务）打开，则同步地址应填当前打开地址（同源），否则提示合一服务端口 8899
-    let curHost = '';
-    try {
-      const u = new URL(location.href);
-      if (u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') curHost = u.hostname + (u.port ? ':' + u.port : '');
-    } catch (e) { /* ignore */ }
-    const hint = curHost ? curHost : _localAddrs[0] + ':8899';
+    // 浏览器端：电脑用桌面应用做同步主机（4789），同步地址填 电脑IP:4789
     syncHostLocal.style.display = 'block';
-    syncHostLocal.textContent = '同步地址：' + hint + '（手机填这个；若用桌面应用同步则填 ' + _localAddrs[0] + ':' + SYNC_PORT + '）';
+    syncHostLocal.textContent = '同步地址：' + _localAddrs[0] + ':' + SYNC_PORT + '（在电脑上打开「文玩记录本」桌面应用，手机填这个后点「一键同步」）';
   }
 
   // 自动发现主机（扫描本机网段）
@@ -6913,12 +7492,12 @@
           syncLogLine('err',
             '<b>当前页面是 HTTPS（GitHub Pages）</b>，浏览器出于安全策略禁止连接 http:// 局域网主机，所以同步无法成功。<br>' +
             '解决办法：改用<b>局域网地址</b>打开本应用再同步——' +
-            '① 在电脑上双击运行「一键同步主机-局域网.cmd」；' +
-            '② 用 iPhone 浏览器访问 <b>http://电脑IP:8899</b>；' +
-            '③ 同步地址填 <b>电脑IP:8899</b> 后点「一键同步」。'
+            '① 在电脑上打开「文玩记录本」<b>桌面应用</b>（会自动开启同步主机 4789）；' +
+            '② 用 iPhone 浏览器访问 <b>http://电脑IP:8899</b> 打开本应用；' +
+            '③ 同步地址填 <b>电脑IP:4789</b> 后点「一键同步」。'
           );
         } else {
-          syncLogLine('err', '同步失败：' + (err.message || '网络异常') + '<br>请确认电脑已运行「一键同步主机-局域网.cmd」、手机和电脑在同一 WiFi，且同步地址填「电脑IP:8899」（如 192.168.1.5:8899）。');
+          syncLogLine('err', '同步失败：' + (err.message || '网络异常') + '<br>请确认电脑已打开「文玩记录本」桌面应用、手机和电脑在同一 WiFi，且同步地址填「电脑IP:4789」（如 192.168.1.5:4789）。');
         }
       })
       .finally(() => syncSetBusy(false));
@@ -6975,6 +7554,7 @@
     $('cardPriceSwitch').classList.toggle('on', prefs.showCardPrice);
     $('catInNameSwitch').classList.toggle('on', prefs.showCatInName);
     $('autoPlaySwitch').classList.toggle('on', prefs.detailAutoPlay);
+    $('autoSyncSwitch').classList.toggle('on', prefs.autoSync);
   }
   $('cardPriceSwitch').addEventListener('click', () => {
     prefs.showCardPrice = !prefs.showCardPrice;
@@ -6994,6 +7574,12 @@
     savePrefs();
     syncPrefSwitches();
     toast(prefs.detailAutoPlay ? '已开启详情页自动轮播' : '已关闭详情页自动轮播');
+  });
+  $('autoSyncSwitch').addEventListener('click', () => {
+    prefs.autoSync = !prefs.autoSync;
+    savePrefs();
+    syncPrefSwitches();
+    toast(prefs.autoSync ? '已开启自动同步（打开应用时同步到电脑）' : '已关闭自动同步');
   });
   syncPrefSwitches();
 
@@ -7134,28 +7720,50 @@
 
   // ==================== 启动恢复：从 IndexedDB 影子备份补齐丢失的 localStorage 键 ====================
   // iOS Safari/PWA 下 localStorage 写入可能因进程被杀未落盘，导致下次打开数据丢失、回退演示数据。
-  // 此函数在页面加载末尾异步执行：若发现 localStorage 中某键缺失（被系统清空/丢失）而 IndexedDB 有备份，
+  // 此函数在页面加载末尾异步执行：若发现 localStorage 中某键缺失或为空（被系统清空/丢失）而 IndexedDB 有备份，
   // 则写回该键并触发一次 reload，让页面以正常同步流程（loadItems/loadLedger）读取真实数据。
   // 恢复后 localStorage 已就位，再次执行时不再触发 reload（防死循环）。
+  // 门闩 _idbRestoring：启动恢复完成前为 true，saveItems/saveLedger 遇到空数据时跳过写入，
+  // 避免「启动瞬间空数组覆盖备份」导致恢复失效、数据不可逆丢失。所有出口（Electron/无 IDB/打开失败/完成）都必须置 false。
+  var _idbRestoring = true;
   function restoreFromIDB() {
-    if (wwStore.isElectron) return; // 桌面端走 IPC，无需恢复
-    if (typeof indexedDB === 'undefined') return; // IDB 不可用则保持现状（纯 localStorage）
+    if (wwStore.isElectron) { _idbRestoring = false; return; } // 桌面端走 IPC，无需恢复
+    if (typeof indexedDB === 'undefined') { _idbRestoring = false; return; } // IDB 不可用则保持现状（纯 localStorage）
     idbGetAll().then(function (backup) {
-      if (!backup) return; // 无备份/打开失败，静默降级
+      if (!backup) { _idbRestoring = false; return; } // 无备份/打开失败，静默降级并释放门闩
       var changed = false;
       try {
         for (var k in backup) {
           if (!Object.prototype.hasOwnProperty.call(backup, k)) continue;
-          if (localStorage.getItem(k) === null) {
-            localStorage.setItem(k, String(backup[k]));
+          var bv = backup[k];
+          if (bv === null || bv === undefined || bv === '') continue;
+          var cur = localStorage.getItem(k);
+          var isEmpty = cur === null;
+          if (!isEmpty) {
+            // 空数组/空对象视作丢失（安全：用户主动清空会同步 idbDel 清掉 IDB 对应键，此处不会误恢复）
+            try {
+              var parsed = JSON.parse(cur);
+              if (Array.isArray(parsed) && parsed.length === 0) isEmpty = true;
+              else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length === 0) isEmpty = true;
+            } catch (e) { /* 非 JSON 值视为有效，不覆盖 */ }
+          }
+          if (isEmpty) {
+            localStorage.setItem(k, String(bv));
+            idbPut(k, bv); // 写回 IDB，保持两存储一致（防二次丢失）
             changed = true;
           }
         }
       } catch (e) { /* ignore */ }
+      _idbRestoring = false; // 无论是否恢复，恢复流程结束即释放门闩
       if (changed) location.reload();
     });
   }
   restoreFromIDB();
+
+  // 延迟触发自动同步，避开首屏渲染与 IDB 恢复的竞态（静默，失败不影响使用）
+  if (typeof autoSyncIfConfigured === 'function') {
+    setTimeout(autoSyncIfConfigured, 800);
+  }
 
 </script>
 </body>
