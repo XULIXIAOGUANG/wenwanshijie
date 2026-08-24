@@ -29,8 +29,10 @@
    - `manifest.json`
    - `sw.js`
    - `icons/` 文件夹（3 个图标）
-   - `assets/` 文件夹（头像图）
+   - `version.json`
 3. 点 **Commit changes** 提交
+
+> 提示：每次发新版需三处同步版本号——`version.json`、`index.html` 的 `APP_VERSION` 常量、`sw.js` 的 `CACHE` 名。这样手机 PWA 才能检测到更新并刷新离线缓存。
 
 ### 4. 开启 Pages 并发布
 1. 仓库页面 → **Settings** → 左侧 **Pages**
