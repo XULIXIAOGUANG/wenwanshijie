@@ -1,4 +1,4 @@
-const CACHE = 'wwapp-v3';
+const CACHE = 'wwapp-v4';
 const SHELL = [
   './index.html',
   './manifest.json',
