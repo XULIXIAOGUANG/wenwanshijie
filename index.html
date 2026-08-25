@@ -3275,7 +3275,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.2';
+  const APP_VERSION = 'v3.1.3';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -5069,10 +5069,13 @@
       });
     });
     const addBox = $('recordPhotoBox2');
-    if (addBox) addBox.addEventListener('click', () => $('recordPhotoInput').click());
+    if (addBox) addBox.addEventListener('click', () => openFilePicker($('recordPhotoInput')));
   }
-  $('recordPhotoBox').addEventListener('click', () => $('recordPhotoInput').click());
+  $('recordPhotoBox').addEventListener('click', () => openFilePicker($('recordPhotoInput')));
   $('recordPhotoInput').addEventListener('change', () => {
+    if (wwStore.isElectron && $('recordPhotoInput').__origAccept !== undefined) {
+      $('recordPhotoInput').setAttribute('accept', $('recordPhotoInput').__origAccept);
+    }
     const files = Array.from($('recordPhotoInput').files || []);
     $('recordPhotoInput').value = '';
     if (!files.length) return;
@@ -6796,8 +6799,19 @@
     $('itemCareChips').querySelectorAll('.opt-chip').forEach(x => x.classList.toggle('active', x === c));
   });
   // ============ 编辑弹层：多图上传（迁移：单图 → 多图九宫格，最多 9 张） ============
-  $('itemPhotoBox').addEventListener('click', () => $('itemPhotoInput').click());
+  // 桌面端：默认显示"所有文件"（清空 accept 让系统文件对话框包含"所有文件"项；手机 PWA 保留 image/* 自动跳相册）
+  function openFilePicker(input) {
+    if (wwStore.isElectron) {
+      if (input.__origAccept === undefined || input.__origAccept === null) input.__origAccept = input.getAttribute('accept');
+      input.removeAttribute('accept');
+    }
+    input.click();
+  }
+  $('itemPhotoBox').addEventListener('click', () => openFilePicker($('itemPhotoInput')));
   $('itemPhotoInput').addEventListener('change', () => {
+    if (wwStore.isElectron && $('itemPhotoInput').__origAccept !== undefined) {
+      $('itemPhotoInput').setAttribute('accept', $('itemPhotoInput').__origAccept);
+    }
     const files = Array.from($('itemPhotoInput').files || []);
     $('itemPhotoInput').value = '';
     if (!files.length) return;
@@ -6828,7 +6842,7 @@
       });
     });
     const addBox = $('itemPhotoBox2');
-    if (addBox) addBox.addEventListener('click', () => $('itemPhotoInput').click());
+    if (addBox) addBox.addEventListener('click', () => openFilePicker($('itemPhotoInput')));
   }
 
   // ============ 记一笔弹层 ============
