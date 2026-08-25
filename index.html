@@ -2724,7 +2724,6 @@
       <div class="lightbox-stage" id="lightboxStage"></div>
       <div class="lightbox-page" id="lightboxPage">1 / 1</div>
     </div>
-    </div>
 
     <!-- 遮罩 -->
     <div class="mask" id="addMask"></div>
@@ -3241,7 +3240,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.0';
+  const APP_VERSION = 'v3.1.1';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -3934,7 +3933,11 @@
   function loadLedger() {
     try {
       const raw = JSON.parse(wwStore.get('wwLedger') || 'null');
-      if (Array.isArray(raw)) return raw;
+      if (Array.isArray(raw)) {
+        // 清洗：date 缺失或非字符串的记录归入 ''（无日期），保证 renderLedger 排序/分组不抛异常、不白屏
+        raw.forEach(r => { if (r && typeof r.date !== 'string') r.date = ''; });
+        return raw;
+      }
     } catch (e) { /* ignore */ }
     return [];
   }
@@ -5201,6 +5204,41 @@
     $('lightboxStage').innerHTML = '<img class="lb-img" src="' + detailImgs[detailImgIdx] + '" alt="">';
     $('lightboxPage').textContent = (detailImgIdx + 1) + ' / ' + detailImgs.length;
   });
+  // ============ 触摸滑动切换图片（手机/PWA 支持左右滑） ============
+  // 通用水平滑动处理：记录起始坐标，水平位移 > 阈值且 > 垂直位移时切换上一张/下一张
+  function bindTouchSwipe(el, onLeft, onRight) {
+    let tx = 0, ty = 0, tracking = false;
+    el.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      tx = e.touches[0].clientX; ty = e.touches[0].clientY; tracking = true;
+    }, { passive: true });
+    el.addEventListener('touchmove', e => {
+      if (!tracking || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - tx, dy = e.touches[0].clientY - ty;
+      // 仅水平滑动时阻止页面滚动，垂直滑动放行（不影响详情页纵向滚动）
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) e.preventDefault();
+    }, { passive: false });
+    el.addEventListener('touchend', e => {
+      if (!tracking) return;
+      tracking = false;
+      const c = e.changedTouches && e.changedTouches[0];
+      if (!c) return;
+      const dx = c.clientX - tx, dy = c.clientY - ty;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) onLeft(); else onRight();
+      }
+    }, { passive: true });
+  }
+  function refreshLightboxView() {
+    if (!detailImgs.length) return;
+    $('lightboxStage').innerHTML = '<img class="lb-img" src="' + detailImgs[detailImgIdx] + '" alt="">';
+    $('lightboxPage').textContent = (detailImgIdx + 1) + ' / ' + detailImgs.length;
+  }
+  // 详情页轮播图：左滑下一张、右滑上一张
+  bindTouchSwipe(detailSwiperEl, () => { showDetailSlide(detailImgIdx + 1); startDetailAutoPlay(); }, () => { showDetailSlide(detailImgIdx - 1); startDetailAutoPlay(); });
+  // 全屏预览 lightbox：左滑下一张、右滑上一张（与点击切换共存）
+  const lbStageEl = $('lightboxStage');
+  bindTouchSwipe(lbStageEl, () => { showDetailSlide(detailImgIdx + 1); refreshLightboxView(); }, () => { showDetailSlide(detailImgIdx - 1); refreshLightboxView(); });
   $('lightboxClose').addEventListener('click', closeDetailLightbox);
   lightboxEl.addEventListener('click', e => { if (e.target === lightboxEl) closeDetailLightbox(); });
   // 首页：最近常盘卡片 / 最近记录（关联藏品项）点击进详情
@@ -5661,14 +5699,18 @@
       rows = rows.filter(r => ids.indexOf(r.itemId) >= 0);
     }
     // 日期分组
-    rows.sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+    // 防御：date/time 可能缺失或非字符串（脏数据），统一兜底为 ''，避免 sort 抛 TypeError 导致白屏
+    rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || ''));
     const groups = {};
-    rows.forEach(r => { (groups[r.date] = groups[r.date] || []).push(r); });
+    rows.forEach(r => {
+      const d = (typeof r.date === 'string' ? r.date : '') || '';
+      (groups[d] = groups[d] || []).push(r);
+    });
     const today = todayStr();
     const yest = yesterdayStr();
     const listEl = $('ledgerList');
     listEl.innerHTML = Object.keys(groups).map(date => {
-      const label = date === today ? '今天' : date === yest ? '昨天' : date.slice(5);
+      const label = !date ? '无日期' : (date === today ? '今天' : date === yest ? '昨天' : date.slice(5));
       return '<div class="date-group"><div class="date-title">' + label + '</div><div class="card">' +
         groups[date].map(ledgerRowHtml).join('') + '</div></div>';
     }).join('');
@@ -7142,6 +7184,11 @@
         onConfirm: () => {
           try {
             Object.keys(payload.data).forEach(k => wwStore.set(k, payload.data[k]));
+            // 完整覆盖语义：对 BACKUP_KEYS 中存在但备份中缺失的键执行删除，
+            // 避免导入小备份后旧键残留，导致「覆盖当前全部数据」不彻底
+            BACKUP_KEYS.forEach(k => {
+              if (!Object.prototype.hasOwnProperty.call(payload.data, k)) wwStore.remove(k);
+            });
             toast('导入成功，正在刷新…');
             setTimeout(() => location.reload(), 600);
           } catch (e) {
@@ -7736,7 +7783,17 @@
         for (var k in backup) {
           if (!Object.prototype.hasOwnProperty.call(backup, k)) continue;
           var bv = backup[k];
-          if (bv === null || bv === undefined || bv === '') continue;
+          // IDB 备份值本身为空（null/undefined/''/[]/{}）时视为确实无数据，
+          // 不恢复、不触发 reload，避免「导入空数组备份 → 恢复空数组 → 再次判定丢失」的无限闪屏循环。
+          var bvEmpty = bv === null || bv === undefined || bv === '';
+          if (!bvEmpty && typeof bv === 'string') {
+            try {
+              var bp = JSON.parse(bv);
+              if (Array.isArray(bp) && bp.length === 0) bvEmpty = true;
+              else if (bp && typeof bp === 'object' && !Array.isArray(bp) && Object.keys(bp).length === 0) bvEmpty = true;
+            } catch (e) { /* 非 JSON 值视为有效 */ }
+          }
+          if (bvEmpty) continue;
           var cur = localStorage.getItem(k);
           var isEmpty = cur === null;
           if (!isEmpty) {
