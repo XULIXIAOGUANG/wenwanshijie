@@ -1840,6 +1840,28 @@
   .cal-btn.active { background: var(--primary-bg); color: var(--primary-deep); }
   .cal-btn:active { transform: scale(0.97); }
 
+  /* ======== 录入藏品：日期选择弹层（替代原生 type=date，规避 Electron 原生 date picker 翻月白屏） ======== */
+  .datepick-pop { width: 296px; }
+  .datepick-cell {
+    height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; border-radius: 9px;
+    cursor: pointer; user-select: none; position: relative;
+    background: var(--page-bg);
+    transition: all 0.12s;
+  }
+  .datepick-cell:active { transform: scale(0.88); opacity: 0.9; }
+  .datepick-cell.blank { pointer-events: none; background: transparent; }
+  .datepick-cell.today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .datepick-cell.selected { background: var(--primary-deep); color: #fff; font-weight: 600; }
+  .datepick-cell.selected.today { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 3.5px var(--primary-deep); }
+  .datepick-clear {
+    text-align: center; margin-top: 8px; padding-top: 9px;
+    border-top: 1px solid var(--page-bg);
+    color: var(--text-sub); font-size: 12px; cursor: pointer; user-select: none;
+  }
+  .datepick-clear:active { color: var(--primary-deep); }
+
   /* 记录详情弹层 */
   .rd-swiper {
     display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px;
@@ -2786,7 +2808,7 @@
         <input type="number" class="form-input" id="itemOrigPriceInput" placeholder="原价 ¥（选填，体现价值）" min="0" step="0.01">
         <input type="number" class="form-input" id="itemPriceInput" placeholder="购入价 ¥（可选）" min="0" step="0.01">
       </div>
-      <input type="date" class="form-input full" id="itemBuyDateInput" title="购入日期">
+      <input type="text" readonly class="form-input full" id="itemBuyDateInput" title="购入日期" placeholder="点选购入日期">
       <div class="sheet-label">购买渠道（可选）</div>
       <div class="opt-chips" id="itemChannelChips"></div>
       <div class="sheet-label">快递费（选填，自动记账）</div>
@@ -2799,7 +2821,7 @@
       </div>
 
       <div class="sheet-label">开始盘玩时间</div>
-      <input type="date" class="form-input full" id="itemPlayDateInput">
+      <input type="text" readonly class="form-input full" id="itemPlayDateInput" title="开始盘玩时间" placeholder="点选开始盘玩时间">
       <div class="play-hint">从该日期起开始计算盘玩累计天数（区分购入日期）</div>
 
       <div class="sheet-label">保养周期</div>
@@ -3218,6 +3240,19 @@
   </div>
 </div>
 
+<!-- 录入藏品：日期选择弹层（替代原生 type=date） -->
+<div class="mask" id="datePickerMask"></div>
+<div class="cal-pop datepick-pop" id="datePickerSheet">
+  <div class="cal-nav">
+    <span class="cal-arrow" id="datePickerPrev">‹</span>
+    <span class="cal-cur" id="datePickerCur">2026年08月</span>
+    <span class="cal-arrow" id="datePickerNext">›</span>
+  </div>
+  <div class="cal-dows"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+  <div class="cal-grid" id="datePickerGrid"></div>
+  <div class="datepick-clear" id="datePickerClear">清除日期</div>
+</div>
+
 <!-- 盘玩记录：记录详情弹层 -->
 <div class="mask" id="recDetailMask"></div>
 <div class="add-sheet" id="recDetailSheet">
@@ -3240,7 +3275,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.1';
+  const APP_VERSION = 'v3.1.2';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -6421,12 +6456,118 @@
     $('catSheet').classList.add('hidden');
   }
   function closeItemSheet() {
+    closeDatePicker(); // 关闭录入弹层时一并收起日期选择浮层
     itemMaskEl.classList.remove('show');
     itemSheetEl.classList.remove('show');
     setTimeout(() => {
       $('ledgerSheet').classList.remove('hidden');
       $('catSheet').classList.remove('hidden');
     }, 300);
+  }
+  // ======== 录入藏品：自定义日期选择（替代原生 type=date，规避 Electron 原生 date picker 翻月白屏） ========
+  let datePickerTarget = null;      // 当前正在编辑的日期输入框
+  let datePickerYear = 0, datePickerMonth = 1; // 日期选择浮层当前展示的年 / 月
+  function openDatePicker(inputEl) {
+    if (!inputEl) return;
+    datePickerTarget = inputEl;
+    // 年月定位：已有值 → 其所在月；否则当前月
+    const v = inputEl.value || todayStr();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      datePickerYear = +v.slice(0, 4);
+      datePickerMonth = +v.slice(5, 7);
+    } else {
+      datePickerYear = +todayStr().slice(0, 4);
+      datePickerMonth = +todayStr().slice(5, 7);
+    }
+    // 浮层定位：紧贴输入框下方，底部不足时向上弹出
+    const sheet = $('datePickerSheet');
+    const rect = inputEl.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const w = 296, estH = 380;
+    let left = Math.round(rect.left);
+    if (left + w > vw - 10) left = vw - 10 - w;
+    if (left < 10) left = 10;
+    let top = Math.round(rect.bottom) + 6;
+    if (top + estH > vh - 10) top = Math.round(rect.top) - 6 - estH;
+    sheet.style.left = left + 'px';
+    sheet.style.top = top + 'px';
+    renderDatePicker();
+    $('datePickerMask').classList.add('show');
+    sheet.classList.add('show');
+  }
+  function closeDatePicker() {
+    $('datePickerMask').classList.remove('show');
+    $('datePickerSheet').classList.remove('show');
+    datePickerTarget = null;
+  }
+  function renderDatePicker() {
+    $('datePickerCur').textContent = datePickerYear + '年' + String(datePickerMonth).padStart(2, '0') + '月';
+    const y = datePickerYear, mo = datePickerMonth;
+    const ym = y + '-' + String(mo).padStart(2, '0');
+    const today = todayStr();
+    const cur = datePickerTarget ? datePickerTarget.value : '';
+    const firstDow = new Date(y, mo - 1, 1).getDay();
+    const daysInMonth = new Date(y, mo, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push('<div class="datepick-cell blank"></div>');
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = ym + '-' + String(d).padStart(2, '0');
+      const cls = ['datepick-cell'];
+      if (key === today) cls.push('today');
+      if (key === cur) cls.push('selected');
+      cells.push('<div class="' + cls.join(' ') + '" data-day="' + key + '">' + d + '</div>');
+    }
+    $('datePickerGrid').innerHTML = cells.join('');
+  }
+  function shiftDatePicker(delta) {
+    datePickerMonth += delta;
+    if (datePickerMonth < 1) { datePickerMonth = 12; datePickerYear--; }
+    if (datePickerMonth > 12) { datePickerMonth = 1; datePickerYear++; }
+    renderDatePicker();
+  }
+  // 给单个原生日期输入框套上自定义日期选择（readonly 阻断原生浮层，点击改用自定义月历）
+  function bindDateInputEl(el) {
+    if (!el || el.__dpBound) return;
+    el.__dpBound = true;
+    el.setAttribute('readonly', 'readonly');
+    el.addEventListener('click', e => {
+      e.preventDefault();
+      openDatePicker(el);
+    });
+    el.addEventListener('keydown', e => {
+      if (['Enter', ' ', 'Spacebar', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        openDatePicker(el);
+      }
+    });
+  }
+  function bindDatePicker() {
+    // 录入弹层：购入日期 / 开始盘玩时间（已改为 readonly 文本，点击触发自定义选择）
+    bindDateInputEl($('itemBuyDateInput'));
+    bindDateInputEl($('itemPlayDateInput'));
+    // 其余弹层中原生 type=date 输入框：统一拦截，规避 Electron 原生 date picker 翻月白屏
+    ['#itemSheet', '#winSheet', '#sellSheet', '#recordSheet', '#ledgerSheet'].forEach(sel => {
+      const root = document.querySelector(sel);
+      if (root) root.querySelectorAll('input[type="date"]').forEach(bindDateInputEl);
+    });
+    // datePicker 内部控件
+    $('datePickerMask').addEventListener('click', closeDatePicker);
+    $('datePickerPrev').addEventListener('click', () => shiftDatePicker(-1));
+    $('datePickerNext').addEventListener('click', () => shiftDatePicker(1));
+    $('datePickerGrid').addEventListener('click', e => {
+      const cell = e.target.closest('.datepick-cell:not(.blank)');
+      if (!cell) return;
+      const day = cell.dataset.day;
+      if (datePickerTarget) {
+        datePickerTarget.value = day;
+        datePickerTarget.dispatchEvent(new Event('input', { bubbles: true })); // 触发更新预览/统计（如有）
+      }
+      closeDatePicker();
+    });
+    $('datePickerClear').addEventListener('click', () => {
+      if (datePickerTarget) datePickerTarget.value = '';
+      closeDatePicker();
+    });
   }
   function saveItemSheet() {
     const dims = dimsFor(itemState.cat);
@@ -6572,6 +6713,8 @@
       $('confirmMsg').insertAdjacentElement('afterend', extra);
     }
     extra.innerHTML = opts.extraHtml || '';
+    // 额外注入区中的原生 date input 也走自定义日期选择（规避 Electron 原生 date picker 白屏）
+    if (extra.querySelector('input[type="date"]')) extra.querySelectorAll('input[type="date"]').forEach(bindDateInputEl);
     $('confirmMask').classList.add('show');
     $('confirmSheet').classList.remove('hidden');
     $('confirmSheet').classList.add('show');
@@ -6638,6 +6781,7 @@
   itemMaskEl.addEventListener('click', closeItemSheet);
   $('itemSaveBtn').addEventListener('click', saveItemSheet);
   $('itemResetBtn').addEventListener('click', openItemSheet);
+  bindDatePicker();
   $('itemBrandInput').addEventListener('input', updateItemNamePreview);
   $('itemStatusSeg').addEventListener('click', e => {
     const o = e.target.closest('.seg-opt');
