@@ -693,7 +693,7 @@
     border-right: 1px solid var(--divider);
     display: flex; flex-direction: column;
     overflow: hidden;
-    padding-bottom: 30px;
+    padding-bottom: 100px; /* 编辑分类按钮完整露出 tabbar(78px) 之上，间距约 22px */
   }
   .nav-collapse-btn {
     flex-shrink: 0;
@@ -1082,6 +1082,13 @@
     background: rgba(0,0,0,.55); color: #fff; font-size: 15px; line-height: 22px;
     text-align: center; cursor: pointer; border-radius: 0 0 0 10px; user-select: none;
   }
+  /* 照片拖拽调序：被拖块半透明 + 落点高亮插入条 */
+  .photo-cell { cursor: grab; }
+  .photo-cell:active { cursor: grabbing; }
+  .photo-cell .p-del { cursor: pointer; }
+  .photo-cell.dragging { opacity: .45; }
+  .photo-cell.drop-before { box-shadow: -3px 0 0 0 var(--primary); }
+  .photo-cell.drop-after { box-shadow: 3px 0 0 0 var(--primary); }
   .form-textarea {
     width: 100%; box-sizing: border-box;
     border: 1px solid var(--divider);
@@ -2899,6 +2906,9 @@
       <div class="sheet-label">中奖日期</div>
       <input type="date" class="form-input full" id="winDateInput">
 
+      <div class="sheet-label">领取于（领取日期，可选）</div>
+      <input type="date" class="form-input full" id="winClaimAtInput" placeholder="未领取可留空">
+
       <div class="sheet-label">中奖账号（可选）</div>
       <div class="custom-input">
         <input type="text" id="winAccountInput" placeholder="中奖账号">
@@ -3277,7 +3287,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.4';
+  const APP_VERSION = 'v3.1.5';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -5057,7 +5067,7 @@
   function renderRecordPhotoGrid() {
     const grid = $('recordPhotoGrid');
     let html = recordImgs.map((u, i) =>
-      '<div class="photo-cell"><img src="' + u + '" alt=""><span class="p-del" data-del="' + i + '">×</span></div>'
+      '<div class="photo-cell" draggable="true" data-idx="' + i + '"><img src="' + u + '" alt=""><span class="p-del" data-del="' + i + '">×</span></div>'
     ).join('');
     if (recordImgs.length < 9) {
       html += '<div class="photo-upload" id="recordPhotoBox2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg><span>添加</span></div>';
@@ -5072,6 +5082,7 @@
     });
     const addBox = $('recordPhotoBox2');
     if (addBox) addBox.addEventListener('click', () => openFilePicker($('recordPhotoInput')));
+    bindPhotoSort(grid, () => recordImgs, renderRecordPhotoGrid);
   }
   $('recordPhotoBox').addEventListener('click', () => openFilePicker($('recordPhotoInput')));
   $('recordPhotoInput').addEventListener('change', () => {
@@ -5234,7 +5245,20 @@
     $('lightboxPage').textContent = (detailImgIdx + 1) + ' / ' + detailImgs.length;
     lightboxEl.classList.add('show');
   }
-  function closeDetailLightbox() { lightboxEl.classList.remove('show'); }
+  // 全屏预览滚轮切换锁（防一次滚多张）
+  let _lbWheelLock = false;
+  function closeDetailLightbox() { lightboxEl.classList.remove('show'); _lbWheelLock = false; }
+  // 全屏预览滚轮切换：下滚下一张、上滚上一张（与详情页轮播一致）；节流防一次滚多张；不穿透滚动
+  lightboxEl.addEventListener('wheel', e => {
+    if (!detailImgs.length || !lightboxEl.classList.contains('show')) return;
+    e.preventDefault();
+    if (_lbWheelLock) return;
+    _lbWheelLock = true;
+    showDetailSlide(detailImgIdx + (e.deltaY > 0 ? 1 : -1));
+    $('lightboxStage').innerHTML = '<img class="lb-img" src="' + detailImgs[detailImgIdx] + '" alt="">';
+    $('lightboxPage').textContent = (detailImgIdx + 1) + ' / ' + detailImgs.length;
+    setTimeout(() => { _lbWheelLock = false; }, 250);
+  }, { passive: false });
   // 全屏预览左右切换（点击左右半区）
   $('lightboxStage').addEventListener('click', e => {
     if (!detailImgs.length) return;
@@ -5926,6 +5950,7 @@
       $('winBrandInput').value = w.brand || '';
       $('winShipFeeInput').value = w.shipFee || '';
       $('winDateInput').value = w.winDate || todayStr();
+      $('winClaimAtInput').value = w.claimedAt || '';
       $('winAccountInput').value = w.account || '';
       $('winPhoneInput').value = w.phone || '';
       $('winAddressInput').value = w.address || '';
@@ -5939,6 +5964,7 @@
       $('winBrandInput').value = '';
       $('winShipFeeInput').value = '';
       $('winDateInput').value = todayStr();
+      $('winClaimAtInput').value = '';
       $('winAccountInput').value = '';
       $('winPhoneInput').value = '';
       $('winAddressInput').value = '';
@@ -5969,6 +5995,7 @@
     const w = id ? WINS.find(x => x.id === id) : null;
     const shipFee = parseFloat($('winShipFeeInput').value) || 0;
     const isCollType = (winState.type || '藏品') === '藏品';
+    const claimVal = ($('winClaimAtInput').value || '').trim();
     const data = {
       type: winState.type || '藏品',
       // 非藏品仅记录物品名称；藏品记录品类/材质/器型/等级
@@ -5988,6 +6015,8 @@
     };
     if (w) {
       Object.assign(w, data);
+      // 领取日期：输入非空才更新；留空则保留原值（避免误清空已领取日期）
+      if (claimVal) w.claimedAt = claimVal;
       w._dirty = true;
     } else {
       WINS.push(Object.assign({ id: nextWinId(), claimed: false, claimedAt: '', linkedItemId: 0 }, data));
@@ -6831,7 +6860,7 @@
   function renderItemPhotoGrid() {
     const grid = $('itemPhotoGrid');
     let html = itemPhotos.map((u, i) =>
-      '<div class="photo-cell"><img src="' + u + '" alt=""><span class="p-del" data-del="' + i + '">×</span></div>'
+      '<div class="photo-cell" draggable="true" data-idx="' + i + '"><img src="' + u + '" alt=""><span class="p-del" data-del="' + i + '">×</span></div>'
     ).join('');
     if (itemPhotos.length < 9) {
       html += '<div class="photo-upload" id="itemPhotoBox2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg><span>添加</span></div>';
@@ -6846,6 +6875,61 @@
     });
     const addBox = $('itemPhotoBox2');
     if (addBox) addBox.addEventListener('click', () => openFilePicker($('itemPhotoInput')));
+    bindPhotoSort(grid, () => itemPhotos, renderItemPhotoGrid);
+  }
+
+  // 照片网格拖拽调序：itemPhotoGrid / recordPhotoGrid 复用
+  // getArr() 返回当前数组引用（用函数而非捕获变量，避免外部重置后引用失效）；
+  // grid._photoSortBound 防止每次 render 重复绑定累积监听。
+  function bindPhotoSort(grid, getArr, render) {
+    if (grid._photoSortBound) return;
+    grid._photoSortBound = true;
+    let fromIdx = -1;
+    const clear = () => {
+      grid.querySelectorAll('.photo-cell').forEach(x => x.classList.remove('dragging', 'drop-before', 'drop-after'));
+    };
+    grid.addEventListener('dragstart', e => {
+      const c = e.target.closest('.photo-cell');
+      if (!c) return;
+      fromIdx = +c.dataset.idx;
+      c.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', ''); } catch (err) {}
+    });
+    grid.addEventListener('dragover', e => {
+      const c = e.target.closest('.photo-cell');
+      if (!c || fromIdx < 0) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const r = c.getBoundingClientRect();
+      const before = e.clientX < r.left + r.width / 2;
+      // 只清插入条，保留被拖块的 dragging 半透明
+      grid.querySelectorAll('.photo-cell').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+      c.classList.add(before ? 'drop-before' : 'drop-after');
+    });
+    grid.addEventListener('dragleave', e => {
+      if (!grid.contains(e.relatedTarget)) grid.querySelectorAll('.photo-cell').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+    });
+    grid.addEventListener('drop', e => {
+      e.preventDefault();
+      const c = e.target.closest('.photo-cell');
+      clear();
+      if (fromIdx < 0 || !c) { fromIdx = -1; return; }
+      const arr = getArr();
+      const r = c.getBoundingClientRect();
+      const before = e.clientX < r.left + r.width / 2;
+      let toIdx = +c.dataset.idx;
+      if (before && fromIdx > toIdx) toIdx = toIdx;
+      else if (before && fromIdx < toIdx) toIdx = toIdx - 1;
+      else if (!before && fromIdx > toIdx) toIdx = toIdx + 1;
+      // 兜底钳制
+      toIdx = Math.max(0, Math.min(arr.length - 1, toIdx));
+      const moved = arr.splice(fromIdx, 1)[0];
+      arr.splice(toIdx, 0, moved);
+      fromIdx = -1;
+      render();
+    });
+    grid.addEventListener('dragend', () => { clear(); fromIdx = -1; });
   }
 
   // ============ 记一笔弹层 ============
