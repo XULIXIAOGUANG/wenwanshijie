@@ -693,7 +693,7 @@
     border-right: 1px solid var(--divider);
     display: flex; flex-direction: column;
     overflow: hidden;
-    padding-bottom: 70px;
+    padding-bottom: 30px;
   }
   .nav-collapse-btn {
     flex-shrink: 0;
@@ -1778,6 +1778,8 @@
     transition: opacity 0.18s ease, transform 0.18s ease;
   }
   .cal-pop.show { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+  /* datePickerSheet 浮于所有弹层（含 confirmSheet z=100）之上，避免"确认已领取"弹层遮住日历点不到 */
+  #datePickerSheet { z-index: 200; }
   .cal-nav {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 9px;
@@ -3275,7 +3277,7 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.3';
+  const APP_VERSION = 'v3.1.4';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -6533,6 +6535,7 @@
     if (!el || el.__dpBound) return;
     el.__dpBound = true;
     el.setAttribute('readonly', 'readonly');
+    el.setAttribute('type', 'text'); // 屏蔽浏览器原生 date picker（Electron 下 readonly+type=date 仍会弹出）
     el.addEventListener('click', e => {
       e.preventDefault();
       openDatePicker(el);
