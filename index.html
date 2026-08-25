@@ -3287,7 +3287,8 @@
 <script>
   // ============ 全局版本号 ============
   // 每次发新版时三处同步：version.json、本常量、sw.js 的 CACHE 名
-  const APP_VERSION = 'v3.1.5';
+  // v3.2.0：图片外置 IndexedDB，彻底解决 localStorage 5MB 配额被图片撑爆导致藏品不显示/无法导入的问题
+  const APP_VERSION = 'v3.2.0';
 
   // ============ 更新引导横幅（iOS 自动刷新不可靠时的兜底） ============
   function showUpdateBanner(remoteVer) {
@@ -3622,7 +3623,7 @@
     const rec = p.rec;
     const img = (rec.images && rec.images.length) ? rec.images[0] : firstImage(it);
     const imgHtml = img
-      ? '<img class="list-img" src="' + img + '" alt="" loading="lazy">'
+      ? '<img class="list-img" src="' + safeSrc(img) + '" alt="" loading="lazy">'
       : '<div class="list-img" style="background:var(--primary-bg);display:flex;align-items:center;justify-content:center;color:var(--primary-deep);">' + (rec.emoji || '✓') + '</div>';
     const brief = (rec.emoji ? rec.emoji + ' ' : '') + (rec.mood || '');
     return '<div class="list-item" data-id="' + it.id + '">' + imgHtml +
@@ -3808,15 +3809,19 @@
   // 每次写入同步落到 localStorage 之外，再以 readwrite 事务写一份到 IndexedDB（事务提交即持久化，可靠性更高）。
   // 启动时（restoreFromIDB）若发现 localStorage 键缺失，从 IndexedDB 补齐。IDB 不可用/隐私模式时静默降级为纯 localStorage，不影响任何现有功能。
   let _idbPromise = null;
+  // 单条超大值（如带大量 base64 图片的 JSON）经 localStorage 会超配额，因此图片单独外置到 imgs store。
+  // 数据库结构：kv（影子备份，兼容旧版）、imgs（图片 base64，key=imgId）
   function idbOpen() {
     if (_idbPromise) return _idbPromise;
     _idbPromise = new Promise(function (resolve) {
       try {
         if (typeof indexedDB === 'undefined') { resolve(null); return; }
-        var req = indexedDB.open('ww-notebook-store', 1);
-        req.onupgradeneeded = function () {
+        var req = indexedDB.open('ww-notebook-store', 2);
+        req.onupgradeneeded = function (e) {
           var db = req.result;
           if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+          // v2：新增 imgs 图片 store（不设 keyPath，用显式 key put）
+          if (!db.objectStoreNames.contains('imgs')) db.createObjectStore('imgs');
         };
         req.onsuccess = function () { resolve(req.result); };
         req.onerror = function () { resolve(null); };
@@ -3824,6 +3829,63 @@
       } catch (e) { resolve(null); }
     });
     return _idbPromise;
+  }
+  // 图片外置：把一批 {imgId: dataURL} 写入 IDB imgs store（异步，不阻塞业务）
+  function idbPutImgs(map) {
+    if (!map || typeof map !== 'object') return;
+    var keys = Object.keys(map);
+    if (!keys.length) return;
+    idbOpen().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction('imgs', 'readwrite');
+        var store = tx.objectStore('imgs');
+        keys.forEach(function (id) { store.put(String(map[id]), id); });
+        tx.onerror = function () { /* ignore */ };
+        tx.onabort = function () { /* ignore */ };
+      } catch (e) { /* ignore */ }
+    });
+  }
+  // 读取多张图片：ids 数组 -> Promise<{id: dataURL}>
+  function idbGetImgs(ids) {
+    return idbOpen().then(function (db) {
+      if (!db) return {};
+      return new Promise(function (resolve) {
+        try {
+          var out = {};
+          var tx = db.transaction('imgs', 'readonly');
+          var store = tx.objectStore('imgs');
+          var list = (ids || []).slice();
+          if (!list.length) { resolve(out); return; }
+          var done = 0;
+          list.forEach(function (id) {
+            var req = store.get(id);
+            var settled = false;
+            function fin() {
+              if (settled) return; settled = true;
+              done++;
+              if (done >= list.length) resolve(out);
+            }
+            req.onsuccess = function () { if (req.result) out[id] = String(req.result); fin(); };
+            req.onerror = function () { fin(); };
+          });
+        } catch (e) { resolve({}); }
+      });
+    });
+  }
+  // 删除某批图片（数据被替换/清除时释放 IDB 空间）
+  function idbDelImgs(ids) {
+    if (!ids || !ids.length) return;
+    idbOpen().then(function (db) {
+      if (!db) return;
+      try {
+        var tx = db.transaction('imgs', 'readwrite');
+        var store = tx.objectStore('imgs');
+        ids.forEach(function (id) { store.delete(id); });
+        tx.onerror = function () { /* ignore */ };
+        tx.onabort = function () { /* ignore */ };
+      } catch (e) { /* ignore */ }
+    });
   }
   function idbPut(key, value) {
     idbOpen().then(function (db) {
@@ -3895,6 +3957,74 @@
     }
   };
 
+  // ============ 图片外置打包/还原（存储适配层） ============
+  // 把大体积 base64 图片从 localStorage 中拆出，落盘为引用，图片本体存 IndexedDB imgs store。
+  // 这样 localStorage 只保存轻量 JSON，彻底规避 iOS Safari/PWA 约 5MB 配额被图片撑爆的问题。
+  const WWIMG_PREFIX = '$wwimg$';
+  function _isImgDataURL(s) {
+    return typeof s === 'string' && s.length > 22 && s.indexOf('data:image/') === 0 && s.indexOf(';base64,') > 0;
+  }
+  // 深拷贝对象，把其中的 base64 dataURL 替换为 $wwimg$<id> 引用，并异步写入 IDB imgs。返回引用版 JSON 字符串。
+  function packForStorage(obj) {
+    var clone;
+    try { clone = JSON.parse(JSON.stringify(obj)); }
+    catch (e) { return JSON.stringify(obj); }
+    var imgMap = {}; var ids = []; var n = 0;
+    (function walk(node) {
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (node && typeof node === 'object') {
+        if (Array.isArray(node.images)) {
+          node.images = node.images.map(function (u) {
+            if (_isImgDataURL(u)) { var id = 'img' + (n++); imgMap[id] = u; ids.push(id); return WWIMG_PREFIX + id; }
+            return u;
+          });
+        }
+        if (typeof node.img === 'string' && _isImgDataURL(node.img)) {
+          var id0 = 'img' + (n++); imgMap[id0] = node.img; ids.push(id0); node.img = WWIMG_PREFIX + id0;
+        }
+        Object.keys(node).forEach(function (k) { walk(node[k]); });
+      }
+    })(clone);
+    if (ids.length) idbPutImgs(imgMap);
+    return JSON.stringify(clone);
+  }
+  // 统一落盘打包：桌面端 data.json 无 5MB 限制，直接存完整 JSON；浏览器/PWA 端把图片外置到 IDB，避免超配额。
+  function storagePack(obj) {
+    return wwStore.isElectron ? JSON.stringify(obj) : packForStorage(obj);
+  }
+  // 把引用版 JSON 还原为带 base64 的完整对象（异步；cb 收到还原后的对象或 null）
+  function unpackFromStorage(json, cb) {
+    var obj;
+    try { obj = JSON.parse(json); }
+    catch (e) { cb && cb(null); return; }
+    var ids = [];
+    (function scan(node) {
+      if (Array.isArray(node)) { node.forEach(scan); return; }
+      if (node && typeof node === 'object') {
+        if (Array.isArray(node.images)) node.images.forEach(function (u) { if (typeof u === 'string' && u.indexOf(WWIMG_PREFIX) === 0) ids.push(u.slice(WWIMG_PREFIX.length)); });
+        if (typeof node.img === 'string' && node.img.indexOf(WWIMG_PREFIX) === 0) ids.push(node.img.slice(WWIMG_PREFIX.length));
+        Object.keys(node).forEach(function (k) { scan(node[k]); });
+      }
+    })(obj);
+    if (!ids.length) { cb && cb(obj); return; }
+    idbGetImgs(ids).then(function (map) {
+      (function fill(node) {
+        if (Array.isArray(node)) { node.forEach(fill); return; }
+        if (node && typeof node === 'object') {
+          if (Array.isArray(node.images)) {
+            node.images = node.images.map(function (u) {
+              if (typeof u === 'string' && u.indexOf(WWIMG_PREFIX) === 0) { var id = u.slice(WWIMG_PREFIX.length); return map[id] || u; }
+              return u;
+            });
+          }
+          if (typeof node.img === 'string' && node.img.indexOf(WWIMG_PREFIX) === 0) { var id1 = node.img.slice(WWIMG_PREFIX.length); node.img = map[id1] || node.img; }
+          Object.keys(node).forEach(function (k) { fill(node[k]); });
+        }
+      })(obj);
+      cb && cb(obj);
+    });
+  }
+
   // 设备唯一标识：首次运行生成并持久化（同步时用于区分来源）
   let DEVICE_ID = wwStore.get('wwDeviceId') || '';
   if (!DEVICE_ID) {
@@ -3963,7 +4093,7 @@
       if (!it.deviceId) it.deviceId = DEVICE_ID;
       delete it._dirty;
     });
-    wwStore.set('wwItems', JSON.stringify(ITEMS));
+    wwStore.set('wwItems', storagePack(ITEMS));
     _itemsVersion++;
     refreshAll();
   }
@@ -3999,7 +4129,7 @@
       if (!r.deviceId) r.deviceId = DEVICE_ID;
       delete r._dirty;
     });
-    wwStore.set('wwLedger', JSON.stringify(ledger));
+    wwStore.set('wwLedger', storagePack(ledger));
     refreshAll();
   }
   // ============ 中奖记录数据 ============
@@ -4059,7 +4189,7 @@
       if (!w.deviceId) w.deviceId = DEVICE_ID;
       delete w._dirty;
     });
-    wwStore.set('wwWins', JSON.stringify(WINS));
+    wwStore.set('wwWins', storagePack(WINS));
     _winsVersion++;
     refreshAll();
   }
@@ -4371,7 +4501,7 @@
 
   function itemCardHtml(it) {
     const imgPart = firstImage(it)
-      ? '<img class="item-card-img" src="' + firstImage(it) + '" alt="" loading="lazy" decoding="async" width="52" height="52">'
+      ? '<img class="item-card-img" src="' + safeSrc(firstImage(it)) + '" alt="" loading="lazy" decoding="async" width="52" height="52">'
       : '<div class="item-card-img" style="color: var(--primary-deep);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' + iconPaths[it.icon] + '</svg></div>';
     const pricePart = prefs.showCardPrice
       ? (it.status === 'sold'
@@ -5662,7 +5792,7 @@
       right = '<div class="amount">-¥' + fmtMoney(r.amount) + '</div>';
     }
     const img = r.img
-      ? '<img class="list-img" src="' + r.img + '" alt="" loading="lazy">'
+      ? '<img class="list-img" src="' + safeSrc(r.img) + '" alt="" loading="lazy">'
       : '<div class="list-img" style="background:var(--primary-bg);display:flex;align-items:center;justify-content:center;color:' + (r.type === 'income' ? 'var(--income)' : 'var(--primary-deep)') + ';">' + ledgerIconHtml(r) + '</div>';
     return '<div class="list-item" data-lid="' + r.id + '"' + (r.itemId ? ' data-id="' + r.itemId + '"' : '') + '>' + img +
       '<div class="list-info"><div class="list-name">' + r.name + '</div>' +
@@ -6290,6 +6420,12 @@
   function firstImage(it) {
     const arr = imagesOf(it);
     return arr.length ? arr[0] : '';
+  }
+  // 渲染用图片源：启动补图完成前，外置图片在内存中是 $wwimg$<id> 占位符，
+  // 直接当 src 会裂图。这里把占位符统一替换为 1px 透明图，避免闪烁裂图，补图后重渲染显示真图。
+  const PLACEHOLDER_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  function safeSrc(u) {
+    return (typeof u === 'string' && u.indexOf(WWIMG_PREFIX) === 0) ? PLACEHOLDER_PIXEL : (u || '');
   }
   // 存储时把 images 写回藏品，首图同步到 img（兼容旧字段，避免各处读不到）
   function setItemImages(it, arr) {
@@ -7389,21 +7525,37 @@
   // ============ 数据备份：导出 / 导入 ============
   const BACKUP_APP = 'ww-ledger-book';
   const BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwCats', 'wwPrefs', 'itemsNavV2', 'itemsNavHidden', 'appName', 'avatar', 'ww_recordView', 'wwTombstones', 'wwWins'];
+  // 可能含大体积 base64 图片的键：落盘为引用版，导出时必须从 IDB 还原为完整 base64，导入时再外置。
+  const IMG_BACKUP_KEYS = ['wwItems', 'wwLedger', 'wwWins'];
   function exportBackup() {
     try {
       const data = {};
-      BACKUP_KEYS.forEach(k => { const v = wwStore.get(k); if (v !== null) data[k] = v; });
-      const payload = { app: BACKUP_APP, version: 1, exportedAt: new Date().toISOString(), data: data };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'ww-backup-' + todayStr() + '.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast('备份已导出，请妥善保存');
+      // 非含图键同步收集（值小而稳定）
+      BACKUP_KEYS.forEach(k => {
+        if (IMG_BACKUP_KEYS.indexOf(k) === -1) { const v = wwStore.get(k); if (v !== null) data[k] = v; }
+      });
+      // 含图键：从 IDB 还原为完整 base64 后合并进备份（保证跨设备导入图片不丢失）
+      const tasks = IMG_BACKUP_KEYS.map(k => new Promise(res => {
+        const v = wwStore.get(k);
+        if (v === null) { res(); return; }
+        unpackFromStorage(v, full => {
+          data[k] = (full === null) ? v : JSON.stringify(full);
+          res();
+        });
+      }));
+      Promise.all(tasks).then(() => {
+        const payload = { app: BACKUP_APP, version: 1, exportedAt: new Date().toISOString(), data: data };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ww-backup-' + todayStr() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast('备份已导出，请妥善保存');
+      });
     } catch (e) {
       toast('导出失败：' + e.message);
     }
@@ -7428,7 +7580,15 @@
         confirmText: '导入',
         onConfirm: () => {
           try {
-            Object.keys(payload.data).forEach(k => wwStore.set(k, payload.data[k]));
+            Object.keys(payload.data).forEach(k => {
+              let val = payload.data[k];
+              // 含图键：先把图片外置到 IDB imgs，localStorage 只存紧凑引用版，避免超过配额导致写失败（iOS Safari/PWA 约 5MB）
+              if (IMG_BACKUP_KEYS.indexOf(k) !== -1 && typeof val === 'string' && !wwStore.isElectron) {
+                try { val = packForStorage(JSON.parse(val)); }
+                catch (e) { /* 非 JSON 或解析失败，按原样存储 */ }
+              }
+              wwStore.set(k, val);
+            });
             // 完整覆盖语义：对 BACKUP_KEYS 中存在但备份中缺失的键执行删除，
             // 避免导入小备份后旧键残留，导致「覆盖当前全部数据」不彻底
             BACKUP_KEYS.forEach(k => {
@@ -7584,12 +7744,12 @@
     if (!data || typeof data !== 'object') throw new Error('同步返回的数据格式不正确');
     if (Array.isArray(data.wwItems)) {
       ITEMS = data.wwItems;
-      wwStore.set('wwItems', JSON.stringify(ITEMS));
+      wwStore.set('wwItems', storagePack(ITEMS));
       _itemsVersion++;
     }
     if (Array.isArray(data.wwLedger)) {
       ledger = data.wwLedger;
-      wwStore.set('wwLedger', JSON.stringify(ledger));
+      wwStore.set('wwLedger', storagePack(ledger));
     }
     if (data.wwCats && typeof data.wwCats === 'object' && Array.isArray(data.wwCats['品类'])) {
       wwStore.set('wwCats', JSON.stringify(data.wwCats));
@@ -7604,7 +7764,7 @@
     }
     if (Array.isArray(data.wwWins)) {
       WINS = data.wwWins;
-      wwStore.set('wwWins', JSON.stringify(WINS));
+      wwStore.set('wwWins', storagePack(WINS));
       _winsVersion++;
     }
     refreshAll();
@@ -8050,9 +8210,18 @@
             } catch (e) { /* 非 JSON 值视为有效，不覆盖 */ }
           }
           if (isEmpty) {
-            localStorage.setItem(k, String(bv));
-            idbPut(k, bv); // 写回 IDB，保持两存储一致（防二次丢失）
-            changed = true;
+            var toStore = String(bv);
+            // 含图键：若 IDB 备份值仍是完整 base64（旧版未外置的格式），先外置到 imgs 再存紧凑引用版，
+            // 避免因 localStorage 超配额（iOS/PWA 约 5MB）导致恢复失败——这正是「藏品导入后不显示」的根因。
+            if (IMG_BACKUP_KEYS.indexOf(k) !== -1 && toStore.indexOf('data:image/') !== -1) {
+              try { toStore = packForStorage(JSON.parse(bv)); }
+              catch (e) { /* 解析失败按原样存储 */ }
+            }
+            try {
+              localStorage.setItem(k, toStore);
+              idbPut(k, toStore); // 写回 IDB，保持两存储一致（防二次丢失）
+              changed = true;
+            } catch (e) { /* 仍超配额则忽略，避免循环 */ }
           }
         }
       } catch (e) { /* ignore */ }
@@ -8061,6 +8230,43 @@
     });
   }
   restoreFromIDB();
+
+  // ==================== 启动图片补全：从 IDB imgs 还原外置图片 ====================
+  // 落盘时图片被 packForStorage 外置为 $wwimg$<id> 引用，localStorage 只存轻量 JSON。
+  // 此处把引用从 IDB 还原回 base64 填回内存对象，并触发重渲染（先隐藏占位、后显示真图）。
+  function restoreAllImagesFromIDB() {
+    function patch(arr, render) {
+      if (!arr || !arr.length) return;
+      unpackFromStorage(JSON.stringify(arr), function (full) {
+        if (!full || !full.length) return;
+        arr.length = 0;
+        full.forEach(function (x) { arr.push(x); });
+        if (typeof render === 'function') { try { render(); } catch (e) { /* ignore */ } }
+      });
+    }
+    patch(ITEMS, renderItems);
+    patch(ledger, renderLedger);
+    patch(WINS, renderWins);
+  }
+  // ==================== 旧数据迁移：把 localStorage 中仍是完整 base64 的大键外置到 IDB ====================
+  // 升级前版本（v3.1.5 及更早）把图片以 base64 直接存 localStorage，易超配额。首次升级后主动外置，
+  // 释放 localStorage 空间并保证后续读写走新架构。只改存储层，不触发渲染，幂等（已是引用版则跳过）。
+  function migrateLegacyImagesToIDB() {
+    if (wwStore.isElectron) return; // 桌面端 data.json 无 5MB 限制，无需迁移
+    IMG_BACKUP_KEYS.forEach(function (k) {
+      try {
+        var v = wwStore.get(k);
+        if (typeof v !== 'string' || !v.length) return;
+        if (v.indexOf('data:image/') === -1) return; // 已是引用版/无图，跳过
+        wwStore.set(k, packForStorage(JSON.parse(v)));
+      } catch (e) { /* ignore */ }
+    });
+  }
+  // 延迟到 IDB 打开就绪后执行迁移 + 补图；若 restoreFromIDB 触发 reload，reload 后本函数会再次执行，幂等安全。
+  setTimeout(function () {
+    migrateLegacyImagesToIDB();
+    restoreAllImagesFromIDB();
+  }, 120);
 
   // 延迟触发自动同步，避开首屏渲染与 IDB 恢复的竞态（静默，失败不影响使用）
   if (typeof autoSyncIfConfigured === 'function') {
